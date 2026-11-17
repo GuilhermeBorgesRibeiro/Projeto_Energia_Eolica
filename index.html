@@ -1,0 +1,3554 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Usinas Eólicas - Apresentação Interativa</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Ícones Lucide -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-[#071426] text-[#F5F8FC] overflow-hidden">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    // Criador automático de ícones Lucide para funcionar sem npm
+    const createIcon = (name) => ({ className = "w-4 h-4", ...props }) => {
+      const ref = useRef(null);
+      useEffect(() => {
+        if (ref.current && window.lucide && window.lucide.icons[name]) {
+          const svg = window.lucide.createElement(window.lucide.icons[name]);
+          svg.setAttribute('class', className);
+          ref.current.innerHTML = '';
+          ref.current.appendChild(svg);
+        }
+      }, [className]);
+      return <span ref={ref} className="inline-flex items-center justify-center" {...props} />;
+    };
+
+    const Wind = createIcon('Wind'), Zap = createIcon('Zap'), Compass = createIcon('Compass'),
+          Cpu = createIcon('Cpu'), Settings = createIcon('Settings'), Play = createIcon('Play'),
+          Pause = createIcon('Pause'), RotateCcw = createIcon('RotateCcw'), ChevronLeft = createIcon('ChevronLeft'),
+          ChevronRight = createIcon('ChevronRight'), ArrowRight = createIcon('ArrowRight'),
+          CheckCircle2 = createIcon('CheckCircle2'), XCircle = createIcon('XCircle'), Info = createIcon('Info'),
+          Layers = createIcon('Layers'), Globe = createIcon('Globe'), ShieldCheck = createIcon('ShieldCheck'),
+          AlertTriangle = createIcon('AlertTriangle'), Home = createIcon('Home'), Award = createIcon('Award'),
+          Activity = createIcon('Activity'), Gauge = createIcon('Gauge'), Sliders = createIcon('Sliders'),
+          MapPin = createIcon('MapPin'), Sparkles = createIcon('Sparkles'), BookOpen = createIcon('BookOpen'),
+          Menu = createIcon('Menu'), X = createIcon('X'), TrendingUp = createIcon('TrendingUp'),
+          Anchor = createIcon('Anchor'), Mountain = createIcon('Mountain'), RefreshCw = createIcon('RefreshCw'),
+          BatteryCharging = createIcon('BatteryCharging');
+
+    // Gráficos SVG nativos leves substituindo Recharts (evita erro de CDN no navegador)
+    const ResponsiveContainer = ({ children }) => <div className="w-full h-full">{children}</div>;
+    const AreaChart = ({ data = [], children }) => {
+      const maxVal = Math.max(...data.map(d => d.potenciaKW || 1));
+      const pts = data.map((d, i) => `${(i / (data.length - 1)) * 380 + 10},${130 - ((d.potenciaKW || 0) / maxVal) * 110}`).join(' ');
+      return (
+        <svg viewBox="0 0 400 150" className="w-full h-full">
+          <polyline fill="none" stroke="#42D9F5" strokeWidth="2.5" points={pts} />
+          <text x="10" y="145" fill="#A7B7C9" fontSize="9">0 m/s</text>
+          <text x="360" y="145" fill="#A7B7C9" fontSize="9">20 m/s</text>
+        </svg>
+      );
+    };
+    const LineChart = ({ data = [] }) => {
+      const maxVal = Math.max(...data.map(d => d.ventoKW || 1));
+      const ptsVento = data.map((d, i) => `${(i / (data.length - 1)) * 380 + 10},${130 - ((d.ventoKW || 0) / maxVal) * 110}`).join(' ');
+      const ptsElec = data.map((d, i) => `${(i / (data.length - 1)) * 380 + 10},${130 - ((d.eletricaKW || 0) / maxVal) * 110}`).join(' ');
+      return (
+        <svg viewBox="0 0 400 150" className="w-full h-full">
+          <polyline fill="none" stroke="#42D9F5" strokeWidth="1.8" strokeDasharray="4 4" points={ptsVento} />
+          <polyline fill="none" stroke="#53D68A" strokeWidth="2.5" points={ptsElec} />
+          <text x="10" y="145" fill="#A7B7C9" fontSize="9">0 m/s</text>
+          <text x="360" y="145" fill="#A7B7C9" fontSize="9">30 m/s</text>
+        </svg>
+      );
+    };
+    const Area = () => null, Line = () => null, XAxis = () => null, YAxis = () => null,
+          CartesianGrid = () => null, RechartsTooltip = () => null, ReferenceLine = () => null,
+          ReferenceDot = () => null, Legend = () => null;
+
+          const SLIDES_META = [
+  { id: 1, short: 'Capa', title: 'A Energia do Vento' },
+  { id: 2, short: 'Conceito', title: 'O que são Usinas Eólicas?' },
+  { id: 3, short: 'Física', title: 'A Física por Trás do Vento' },
+  { id: 4, short: 'Etapas', title: 'Como Funciona uma Usina' },
+  { id: 5, short: 'Anatomia', title: 'Partes de um Aerogerador' },
+  { id: 6, short: 'Simulador', title: 'Simulador Interativo' },
+  { id: 7, short: 'Betz', title: 'O Limite de Betz' },
+  { id: 8, short: 'Tipos', title: 'Tipos de Usinas Eólicas' },
+  { id: 9, short: 'Impactos', title: 'Vantagens e Desafios' },
+  { id: 10, short: 'Brasil', title: 'Usinas Eólicas no Brasil' },
+  { id: 11, short: 'Transmissão', title: 'Da Usina até a sua Casa' },
+  { id: 12, short: 'Quiz', title: 'Teste seus Conhecimentos' },
+  { id: 13, short: 'Conclusão', title: 'Conclusão Científica' },
+];
+
+// ============================================================================
+// COMPONENTE DE PARTÍCULAS DE VENTO EM CANVAS (FUNDO ATMOSFÉRICO)
+// ============================================================================
+const WindCanvasBackground = ({ speedMultiplier = 1, warmSunset = false }) => {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', handleResize);
+
+    const particleCount = Math.min(75, Math.floor(width / 22));
+    const particles = Array.from({ length: particleCount }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      length: 40 + Math.random() * 110,
+      baseSpeed: 1.2 + Math.random() * 2.5,
+      opacity: 0.08 + Math.random() * 0.22,
+      amplitude: 4 + Math.random() * 10,
+      freq: 0.004 + Math.random() * 0.006,
+      phase: Math.random() * Math.PI * 2,
+    }));
+
+    let time = 0;
+    const render = () => {
+      time += 1;
+      ctx.clearRect(0, 0, width, height);
+
+      particles.forEach((p) => {
+        p.x += p.baseSpeed * speedMultiplier;
+        if (p.x - p.length > width) {
+          p.x = -p.length;
+          p.y = Math.random() * height;
+        }
+
+        ctx.beginPath();
+        const grad = ctx.createLinearGradient(p.x - p.length, p.y, p.x, p.y);
+        const colorRGB = warmSunset ? '251, 191, 36' : '66, 217, 245';
+        grad.addColorStop(0, `rgba(${colorRGB}, 0)`);
+        grad.addColorStop(0.5, `rgba(${colorRGB}, ${p.opacity})`);
+        grad.addColorStop(1, `rgba(${colorRGB}, 0)`);
+
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.5;
+
+        const segments = 10;
+        for (let i = 0; i <= segments; i++) {
+          const px = p.x - p.length + (p.length * i) / segments;
+          const py = p.y + Math.sin(px * p.freq + p.phase + time * 0.02) * p.amplitude;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      });
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [speedMultiplier, warmSunset]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 pointer-events-none z-0 opacity-75"
+    />
+  );
+};
+
+// ============================================================================
+// COMPONENTE VETORIAL DE AEROGERADOR ANIMADO REUTILIZÁVEL
+// ============================================================================
+const AnimatedTurbineSVG = ({
+  x = 100,
+  y = 120,
+  scale = 1,
+  rpm = 14,
+  bladeLengthFactor = 1,
+  glowColor = '#42D9F5',
+  showAirflow = false,
+}) => {
+  const duration = rpm > 0.1 ? `${Math.max(0.55, 60 / rpm)}s` : '0s';
+  const isSpinning = rpm > 0.1;
+
+  return (
+    <g transform={`translate(${x}, ${y}) scale(${scale})`}>
+      {/* Base e Torre */}
+      <ellipse cx="0" cy="145" rx="22" ry="4" fill="rgba(66,217,245,0.18)" />
+      <polygon
+        points="-7,145 7,145 3.5,0 -3.5,0"
+        fill="url(#towerGrad)"
+        stroke="rgba(245,248,252,0.25)"
+        strokeWidth="0.6"
+      />
+      {/* Nacele */}
+      <rect
+        x="-9"
+        y="-7"
+        width="22"
+        height="11"
+        rx="4"
+        fill="#E2E8F0"
+        stroke="#42D9F5"
+        strokeWidth="0.8"
+      />
+      {/* Conjunto Rotativo (Cubo + Pás) */}
+      <g transform="translate(-8, -1.5)">
+        <g
+          style={{
+            transformOrigin: '0px 0px',
+            animation: isSpinning ? `spinTurbine ${duration} linear infinite` : 'none',
+          }}
+        >
+          {[0, 120, 240].map((angle) => (
+            <g key={angle} transform={`rotate(${angle}) scale(1, ${bladeLengthFactor})`}>
+              <path
+                d="M 0,0 C 3,-18 4.5,-55 0.8,-95 C 0,-98 -1.5,-97 -1.5,-93 C -2.5,-55 -2,-18 0,0 Z"
+                fill="url(#bladeGrad)"
+                stroke="rgba(255,255,255,0.5)"
+                strokeWidth="0.5"
+              />
+            </g>
+          ))}
+        </g>
+        {/* Cubo (Spinner) */}
+        <circle cx="0" cy="0" r="5.5" fill="#F8FAFC" stroke={glowColor} strokeWidth="1.5" />
+        <circle cx="0" cy="0" r="2" fill={glowColor} />
+      </g>
+      {showAirflow && isSpinning && (
+        <g opacity="0.55">
+          <line x1="-65" y1="-35" x2="35" y2="-42" stroke={glowColor} strokeWidth="1.2" strokeDasharray="6 6" />
+          <line x1="-70" y1="25" x2="35" y2="32" stroke={glowColor} strokeWidth="1.2" strokeDasharray="6 6" />
+        </g>
+      )}
+    </g>
+  );
+};
+
+// ============================================================================
+// SLIDE 01 — CAPA: A ENERGIA DO VENTO
+// ============================================================================
+const Slide01Cover = ({ onExplore }) => {
+  const [mouseOffset, setMouseOffset] = useState({ x: 0, y: 0 });
+
+  const handleMouseMove = (e) => {
+    const nx = (e.clientX / window.innerWidth - 0.5) * 24;
+    const ny = (e.clientY / window.innerHeight - 0.5) * 16;
+    setMouseOffset({ x: nx, y: ny });
+  };
+
+  return (
+    <div
+      onMouseMove={handleMouseMove}
+      className="relative w-full h-full flex flex-col justify-between overflow-hidden px-6 md:px-16 pt-20 pb-16 select-none"
+    >
+      {/* Brilho atmosférico radial */}
+      <div
+        className="absolute -top-32 left-1/2 -translate-x-1/2 w-[820px] h-[520px] rounded-full pointer-events-none blur-3xl opacity-30 transition-transform duration-300"
+        style={{
+          background: 'radial-gradient(circle, #1479D4 0%, #42D9F5 40%, transparent 75%)',
+          transform: `translate(calc(-50% + ${mouseOffset.x * -0.8}px), ${mouseOffset.y * -0.8}px)`,
+        }}
+      />
+
+      {/* Conteúdo Textual Central */}
+      <div className="relative z-10 max-w-4xl mx-auto text-center my-auto space-y-6">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#1479D4]/20 border border-[#42D9F5]/40 text-[#42D9F5] text-xs md:text-sm font-medium tracking-wider uppercase backdrop-blur-md">
+          <Wind className="w-4 h-4 animate-pulse" />
+          Apresentação Científica Interativa • Física & Energia
+        </div>
+
+        <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-[#F5F8FC] leading-none drop-shadow-[0_4px_24px_rgba(66,217,245,0.28)]">
+          USINAS <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#42D9F5] via-[#7CE8FF] to-[#53D68A]">EÓLICAS</span>
+        </h1>
+
+        <h2 className="text-lg sm:text-2xl md:text-3xl font-medium text-[#F5F8FC]/90 max-w-3xl mx-auto leading-snug">
+          Como a força invisível do vento se transforma em energia elétrica?
+        </h2>
+
+        <p className="text-sm sm:text-base md:text-lg text-[#A7B7C9] italic max-w-2xl mx-auto border-l-2 border-[#42D9F5] pl-4 py-1 bg-white/[0.02] rounded-r-lg">
+          “Uma das maiores forças da natureza pode iluminar cidades inteiras.”
+        </p>
+
+        <div className="pt-4">
+          <button
+            onClick={onExplore}
+            className="group relative inline-flex items-center gap-3 px-8 py-4 rounded-xl bg-gradient-to-r from-[#1479D4] to-[#0EA5E9] hover:from-[#1B88EB] hover:to-[#42D9F5] text-white font-bold text-sm sm:text-base tracking-wide shadow-[0_0_30px_rgba(66,217,245,0.4)] hover:shadow-[0_0_45px_rgba(66,217,245,0.75)] transition-all duration-300 transform hover:-translate-y-0.5 cursor-pointer"
+          >
+            <span>EXPLORAR A APRESENTAÇÃO</span>
+            <ArrowRight className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Cenário Panorâmico com Paralaxe e Aerogeradores */}
+      <div
+        className="relative z-10 w-full max-w-6xl mx-auto h-44 sm:h-56 md:h-64 pointer-events-none transition-transform duration-200 ease-out"
+        style={{
+          transform: `translate(${mouseOffset.x * 0.5}px, ${mouseOffset.y * 0.35}px)`,
+        }}
+      >
+        <svg viewBox="0 0 1200 280" className="w-full h-full overflow-visible">
+          <defs>
+            <linearGradient id="hillBack" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#0D2847" />
+              <stop offset="100%" stopColor="#071426" />
+            </linearGradient>
+            <linearGradient id="hillFront" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#10365C" />
+              <stop offset="100%" stopColor="#071426" />
+            </linearGradient>
+          </defs>
+
+          {/* Montanhas de fundo */}
+          <path
+            d="M-100,280 L-100,190 Q200,120 480,185 T1050,165 L1300,195 L1300,280 Z"
+            fill="url(#hillBack)"
+          />
+          {/* Aerogeradores em segundo plano */}
+          <AnimatedTurbineSVG x={210} y={70} scale={0.58} rpm={11} />
+          <AnimatedTurbineSVG x={485} y={85} scale={0.52} rpm={13} />
+          <AnimatedTurbineSVG x={840} y={62} scale={0.62} rpm={12} />
+          <AnimatedTurbineSVG x={1040} y={82} scale={0.5} rpm={10} />
+
+          {/* Colina em primeiro plano */}
+          <path
+            d="M-100,280 L-100,225 Q320,175 680,220 T1300,205 L1300,280 Z"
+            fill="url(#hillFront)"
+          />
+          {/* Aerogeradores em primeiro plano */}
+          <AnimatedTurbineSVG x={340} y={65} scale={0.95} rpm={15} />
+          <AnimatedTurbineSVG x={675} y={75} scale={0.88} rpm={14} />
+          <AnimatedTurbineSVG x={945} y={68} scale={0.92} rpm={16} />
+        </svg>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// SLIDE 02 — O QUE SÃO USINAS EÓLICAS?
+// ============================================================================
+const SLIDE02_TOPICS = [
+  {
+    id: 'eolica',
+    title: 'Energia Eólica',
+    icon: Wind,
+    text: 'É a energia proveniente do deslocamento de massas de ar na atmosfera. Originada indiretamente pela radiação solar, que aquece a superfície terrestre de maneira desigual, criando gradientes de pressão atmosférica que movimentam o ar das zonas de alta para baixa pressão.',
+  },
+  {
+    id: 'aerogerador',
+    title: 'O Aerogerador',
+    icon: Compass,
+    text: 'Máquina rotativa de alta engenharia que capta a energia cinética dos ventos por meio de pás aerodinâmicas e a converte em energia mecânica de rotação no eixo e, posteriormente, em eletricidade através de um gerador eletromagnético.',
+  },
+  {
+    id: 'organizacao',
+    title: 'Parques vs. Turbina',
+    icon: Layers,
+    text: 'Uma turbina individual atende demandas locais pontuais. Já um parque eólico (usina) reúne dezenas ou centenas de aerogeradores espaçados estrategicamente (geralmente 5 a 9 diâmetros de rotor entre si para evitar o efeito esteira/turbulência) conectados a uma subestação coletora.',
+  },
+  {
+    id: 'renovavel',
+    title: 'Fonte Renovável e Locais',
+    icon: Globe,
+    text: 'É renovável porque o ciclo de aquecimento solar e rotação da Terra reabastece continuamente os ventos sem esgotar recursos. São instaladas em regiões de ventos constantes e laminares: litorais, serras, planaltos elevados e ambientes marítimos (offshore).',
+  },
+];
+
+const SLIDE02_HOTSPOTS = [
+  {
+    id: 'pas',
+    label: 'Pás Aerodinâmicas',
+    x: 26,
+    y: 34,
+    desc: 'Construídas com compósitos leves (fibra de vidro e carbono), possuem perfil aerodinâmico que cria diferença de pressão entre suas faces, gerando força de sustentação e torque.',
+  },
+  {
+    id: 'aerogerador',
+    label: 'Aerogerador (Nacele)',
+    x: 49,
+    y: 28,
+    desc: 'Unidade completa de geração instalada no topo da torre. Abriga o eixo, sistemas de controle, sensores anemométricos e o gerador elétrico.',
+  },
+  {
+    id: 'torres',
+    label: 'Torres Estruturais',
+    x: 49,
+    y: 57,
+    desc: 'Estruturas tubulares de aço ou concreto (80m a 140m+ de altura) que elevam o rotor para alcançar ventos mais velozes e com menor turbulência do solo.',
+  },
+  {
+    id: 'subestacao',
+    label: 'Subestação Coletora',
+    x: 74,
+    y: 72,
+    desc: 'Recebe a energia elétrica gerada por todas as turbinas do parque por cabos subterrâneos e eleva a tensão elétrica para transmissão de longa distância.',
+  },
+  {
+    id: 'linhas',
+    label: 'Linhas de Transmissão',
+    x: 90,
+    y: 54,
+    desc: 'Redes de alta tensão que interligam a usina eólica ao Sistema Interligado Nacional (SIN), levando eletricidade limpa às cidades e indústrias.',
+  },
+];
+
+const Slide02Concept = () => {
+  const [activeTopic, setActiveTopic] = useState(SLIDE02_TOPICS[0]);
+  const [activeHotspot, setActiveHotspot] = useState(SLIDE02_HOTSPOTS[0]);
+
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-5 md:px-14 pt-16 pb-14 max-w-7xl mx-auto">
+      <div className="mb-4">
+        <span className="text-xs font-bold tracking-widest uppercase text-[#42D9F5]">
+          02 • Fundamentos Conceituais
+        </span>
+        <h2 className="text-2xl sm:text-4xl font-bold text-[#F5F8FC] mt-1">
+          O que são Usinas Eólicas?
+        </h2>
+      </div>
+
+      {/* Definição Principal */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#1479D4]/20 via-[#0F2744]/80 to-[#0B1E36]/80 border border-[#42D9F5]/35 backdrop-blur-md mb-5 shadow-lg">
+        <p className="text-sm sm:text-base md:text-lg text-[#F5F8FC] leading-relaxed">
+          <strong className="text-[#42D9F5]">Definição Científica: </strong>
+          “Uma usina eólica é uma instalação que utiliza a energia cinética dos ventos para movimentar aerogeradores, convertendo a energia mecânica de rotação em energia elétrica.”
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        {/* Coluna Esquerda: Abas Explicativas */}
+        <div className="lg:col-span-5 flex flex-col justify-between bg-[#0B1D36]/75 border border-white/10 rounded-2xl p-4 sm:p-5 backdrop-blur-md">
+          <div>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {SLIDE02_TOPICS.map((topic) => {
+                const Icon = topic.icon;
+                const selected = activeTopic.id === topic.id;
+                return (
+                  <button
+                    key={topic.id}
+                    onClick={() => setActiveTopic(topic)}
+                    className={`flex items-center gap-2 p-2.5 rounded-xl text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer border ${
+                      selected
+                        ? 'bg-[#1479D4] text-white border-[#42D9F5] shadow-[0_0_15px_rgba(20,121,212,0.5)]'
+                        : 'bg-white/5 text-[#A7B7C9] border-white/10 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 shrink-0 text-[#42D9F5]" />
+                    <span className="truncate">{topic.title}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="p-4 rounded-xl bg-[#071426]/70 border border-white/10 min-h-[150px] flex flex-col justify-center">
+              <h3 className="text-base sm:text-lg font-bold text-[#42D9F5] mb-2">
+                {activeTopic.title}
+              </h3>
+              <p className="text-xs sm:text-sm text-[#F5F8FC]/90 leading-relaxed">
+                {activeTopic.text}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-[#53D68A]">
+            <span className="flex items-center gap-1.5 font-medium">
+              <Sparkles className="w-4 h-4" /> Energia 100% Renovável e Limpa
+            </span>
+            <span className="text-[#A7B7C9]">Espaçamento otimizado</span>
+          </div>
+        </div>
+
+        {/* Coluna Direita: Parque Eólico Interativo com Hotspots */}
+        <div className="lg:col-span-7 flex flex-col justify-between bg-[#0B1D36]/75 border border-white/10 rounded-2xl p-4 sm:p-5 backdrop-blur-md">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#A7B7C9]">
+              Mapa Interativo do Parque Eólico (Clique nos pontos)
+            </span>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#42D9F5]/15 text-[#42D9F5] border border-[#42D9F5]/30">
+              5 Componentes
+            </span>
+          </div>
+
+          {/* Ilustração SVG + Botões Hotspot */}
+          <div className="relative w-full h-56 sm:h-64 rounded-xl overflow-hidden bg-gradient-to-b from-[#0A2240] via-[#0D2E54] to-[#08172B] border border-white/10">
+            <svg viewBox="0 0 600 240" className="w-full h-full">
+              {/* Solo */}
+              <path d="M0,240 L0,185 Q180,165 360,182 T600,175 L600,240 Z" fill="#0E3459" />
+              {/* Turbinas */}
+              <AnimatedTurbineSVG x={165} y={62} scale={0.82} rpm={14} />
+              <AnimatedTurbineSVG x={295} y={55} scale={0.92} rpm={15} />
+              {/* Cabos subterrâneos */}
+              <path
+                d="M165,182 L295,180 L442,180"
+                stroke="#42D9F5"
+                strokeWidth="2"
+                strokeDasharray="5 4"
+                fill="none"
+              />
+              {/* Subestação */}
+              <g transform="translate(420, 152)">
+                <rect x="0" y="10" width="44" height="22" rx="3" fill="#1E3A5F" stroke="#42D9F5" strokeWidth="1.2" />
+                <rect x="8" y="2" width="10" height="8" fill="#42D9F5" opacity="0.7" />
+                <rect x="26" y="2" width="10" height="8" fill="#53D68A" opacity="0.7" />
+              </g>
+              {/* Torre de Transmissão */}
+              <g transform="translate(535, 110)" stroke="#A7B7C9" strokeWidth="1.5" fill="none">
+                <polygon points="0,0 -12,68 12,68" />
+                <line x1="-18" y1="16" x2="18" y2="16" />
+                <line x1="-14" y1="32" x2="14" y2="32" />
+                <path d="M-71,52 Q-35,62 0,16" stroke="#42D9F5" strokeWidth="1.3" />
+                <path d="M0,16 Q35,28 70,12" stroke="#42D9F5" strokeWidth="1.3" />
+              </g>
+            </svg>
+
+            {/* Botões de Hotspot */}
+            {SLIDE02_HOTSPOTS.map((spot) => {
+              const isSelected = activeHotspot.id === spot.id;
+              return (
+                <button
+                  key={spot.id}
+                  onClick={() => setActiveHotspot(spot)}
+                  style={{ left: `${spot.x}%`, top: `${spot.y}%` }}
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 group flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-[#42D9F5] text-[#071426] scale-110 shadow-[0_0_20px_#42D9F5] z-20'
+                      : 'bg-[#071426]/90 text-[#F5F8FC] border border-[#42D9F5]/70 hover:scale-105 z-10'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-[#071426]' : 'bg-[#42D9F5] animate-ping'}`} />
+                  <span className="hidden sm:inline">{spot.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Caixa de explicação do Hotspot selecionado */}
+          <div className="mt-3 p-3.5 rounded-xl bg-[#1479D4]/15 border border-[#42D9F5]/35">
+            <div className="flex items-center gap-2 text-[#42D9F5] font-bold text-sm mb-1">
+              <Info className="w-4 h-4" />
+              <span>{activeHotspot.label}</span>
+            </div>
+            <p className="text-xs sm:text-sm text-[#F5F8FC]/90 leading-relaxed">
+              {activeHotspot.desc}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// SLIDE 03 — A FÍSICA POR TRÁS DO VENTO
+// ============================================================================
+const Slide03Physics = () => {
+  const [testWindSpeed, setTestWindSpeed] = useState(10);
+
+  // Dados da curva cúbica P = 0.5 * rho * A * v^3 (para rho=1.225 kg/m³, R=40m -> A ≈ 5026.5 m²)
+  const cubicChartData = useMemo(() => {
+    const rho = 1.225;
+    const area = Math.PI * 40 * 40;
+    const points = [];
+    for (let v = 0; v <= 20; v += 2) {
+      const powerKW = (0.5 * rho * area * Math.pow(v, 3)) / 1000;
+      points.push({
+        v,
+        potenciaKW: Math.round(powerKW),
+      });
+    }
+    return points;
+  }, []);
+
+  const currentDemoPowerKW = useMemo(() => {
+    const rho = 1.225;
+    const area = Math.PI * 40 * 40;
+    return Math.round((0.5 * rho * area * Math.pow(testWindSpeed, 3)) / 1000);
+  }, [testWindSpeed]);
+
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-5 md:px-14 pt-16 pb-14 max-w-7xl mx-auto">
+      <div className="mb-3">
+        <span className="text-xs font-bold tracking-widest uppercase text-[#42D9F5]">
+          03 • Mecânica dos Fluidos e Energia
+        </span>
+        <h2 className="text-2xl sm:text-4xl font-bold text-[#F5F8FC] mt-0.5">
+          A Física por Trás do Vento
+        </h2>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        {/* Coluna Esquerda: Fórmulas e Lei Cúbica */}
+        <div className="lg:col-span-6 flex flex-col justify-between space-y-3">
+          {/* Card 1: Energia Cinética */}
+          <div className="p-4 rounded-2xl bg-[#0B1D36]/80 border border-white/10 backdrop-blur-md">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h3 className="text-base sm:text-lg font-bold text-[#F5F8FC]">
+                1. Energia Cinética do Ar
+              </h3>
+              <div className="px-3.5 py-1.5 rounded-lg bg-[#071426] border border-[#42D9F5]/40 font-mono text-base sm:text-lg font-bold text-[#42D9F5]">
+                E<sub>c</sub> = (m · v²) / 2
+              </div>
+            </div>
+            <p className="text-xs sm:text-sm text-[#A7B7C9] mb-2">
+              O vento é ar em movimento. Como possui massa e velocidade, transporta energia cinética:
+            </p>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="p-2 rounded-lg bg-white/5">
+                <strong className="text-[#42D9F5]">E<sub>c</sub></strong>: Energia cinética (J)
+              </div>
+              <div className="p-2 rounded-lg bg-white/5">
+                <strong className="text-[#42D9F5]">m</strong>: Massa do ar (kg)
+              </div>
+              <div className="p-2 rounded-lg bg-white/5">
+                <strong className="text-[#42D9F5]">v</strong>: Velocidade (m/s)
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Potência do Vento */}
+          <div className="p-4 rounded-2xl bg-[#0B1D36]/80 border border-white/10 backdrop-blur-md">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h3 className="text-base sm:text-lg font-bold text-[#F5F8FC]">
+                2. Potência Disponível no Vento
+              </h3>
+              <div className="px-3.5 py-1.5 rounded-lg bg-[#071426] border border-[#53D68A]/50 font-mono text-base sm:text-lg font-bold text-[#53D68A]">
+                P = ½ · ρ · A · v³
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs mt-2">
+              <div className="p-2 rounded-lg bg-white/5">
+                <strong className="text-[#53D68A]">P</strong>: Potência (W)
+              </div>
+              <div className="p-2 rounded-lg bg-white/5">
+                <strong className="text-[#53D68A]">ρ</strong>: Densidade (kg/m³)
+              </div>
+              <div className="p-2 rounded-lg bg-white/5">
+                <strong className="text-[#53D68A]">A</strong>: Área varrida (m²)
+              </div>
+              <div className="p-2 rounded-lg bg-white/5">
+                <strong className="text-[#53D68A]">v</strong>: Velocidade (m/s)
+              </div>
+            </div>
+          </div>
+
+          {/* Destaque Científico Lei Cúbica */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-[#1479D4]/25 to-[#53D68A]/15 border border-[#42D9F5]/40">
+            <div className="flex items-start gap-3">
+              <TrendingUp className="w-6 h-6 text-[#42D9F5] shrink-0 mt-0.5" />
+              <p className="text-xs sm:text-sm text-[#F5F8FC] leading-relaxed">
+                <strong className="text-[#42D9F5]">Lei Cúbica da Potência Eólica: </strong>
+                “A potência disponível no vento aumenta com o cubo da velocidade. Isso significa que, se a velocidade do vento dobrar (2v), a potência disponível será <span className="text-[#53D68A] font-bold">oito vezes maior (2³ = 8)</span>, considerando as demais condições constantes.”
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Coluna Direita: Demonstração Animada + Gráfico Interativo */}
+        <div className="lg:col-span-6 flex flex-col justify-between bg-[#0B1D36]/80 border border-white/10 rounded-2xl p-4 sm:p-5 backdrop-blur-md">
+          {/* Seletor interativo de velocidade */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-[#F5F8FC]">
+                Relação Cúbica: Velocidade vs. Potência
+              </h3>
+              <p className="text-xs text-[#A7B7C9]">
+                Referência ilustrativa: R = 40 m (A ≈ 5.027 m²), ρ = 1,225 kg/m³
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 bg-[#071426] p-1 rounded-xl border border-white/10">
+              {[5, 10, 15, 20].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setTestWindSpeed(v)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    testWindSpeed === v
+                      ? 'bg-[#42D9F5] text-[#071426]'
+                      : 'text-[#A7B7C9] hover:text-white'
+                  }`}
+                >
+                  {v} m/s
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Mini visualização animada + métricas */}
+          <div className="grid grid-cols-12 gap-3 items-center bg-[#071426]/80 rounded-xl p-3 border border-white/10 mb-3">
+            <div className="col-span-5 h-28 relative overflow-hidden rounded-lg bg-[#0A1D36]">
+              <svg viewBox="0 0 180 150" className="w-full h-full">
+                <AnimatedTurbineSVG
+                  x={105}
+                  y={52}
+                  scale={0.62}
+                  rpm={testWindSpeed * 1.4}
+                  showAirflow={true}
+                />
+              </svg>
+            </div>
+            <div className="col-span-7 space-y-1.5">
+              <div className="text-xs text-[#A7B7C9]">
+                Velocidade selecionada: <strong className="text-[#42D9F5]">{testWindSpeed} m/s</strong>
+              </div>
+              <div className="text-lg sm:text-2xl font-extrabold text-[#53D68A]">
+                {currentDemoPowerKW.toLocaleString('pt-BR')} kW
+              </div>
+              <div className="text-[11px] text-[#A7B7C9]">
+                {testWindSpeed === 10 && 'Dobro de 5 m/s → Potência 8× maior (3.083 kW vs 385 kW)!'}
+                {testWindSpeed === 5 && 'Vento moderado: base de referência (385 kW).'}
+                {testWindSpeed === 15 && 'Triplo de 5 m/s → Potência 27× maior (10.405 kW)!'}
+                {testWindSpeed === 20 && 'Quádruplo de 5 m/s → Potência 64× maior (24.664 kW)!'}
+              </div>
+            </div>
+          </div>
+
+          {/* Gráfico Recharts */}
+          <div className="w-full h-44 sm:h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={cubicChartData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="cubicFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#42D9F5" stopOpacity={0.45} />
+                    <stop offset="95%" stopColor="#42D9F5" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                <XAxis
+                  dataKey="v"
+                  stroke="#A7B7C9"
+                  tick={{ fontSize: 11 }}
+                  unit=" m/s"
+                />
+                <YAxis
+                  stroke="#A7B7C9"
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(val) => `${(val / 1000).toFixed(0)}MW`}
+                />
+                <RechartsTooltip
+                  contentStyle={{
+                    backgroundColor: '#071426',
+                    borderColor: '#42D9F5',
+                    borderRadius: '10px',
+                    fontSize: '12px',
+                    color: '#F5F8FC',
+                  }}
+                  formatter={(value) => [`${Number(value).toLocaleString('pt-BR')} kW`, 'Potência do Vento']}
+                  labelFormatter={(label) => `Velocidade: ${label} m/s`}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="potenciaKW"
+                  stroke="#42D9F5"
+                  strokeWidth={2.5}
+                  fill="url(#cubicFill)"
+                />
+                <ReferenceDot
+                  x={testWindSpeed}
+                  y={currentDemoPowerKW}
+                  r={6}
+                  fill="#53D68A"
+                  stroke="#F5F8FC"
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// SLIDE 04 — COMO FUNCIONA UMA USINA EÓLICA? (7 ETAPAS + INDUÇÃO DE FARADAY)
+// ============================================================================
+const HOW_IT_WORKS_STEPS = [
+  {
+    step: 1,
+    node: 'VENTO → PÁS',
+    title: 'ETAPA 1 — O Vento Atinge as Pás',
+    subtitle: 'Aerodinâmica e Força de Sustentação',
+    content:
+      'As pás possuem perfil aerodinâmico semelhante ao de asas de avião (aerofólio). Quando o fluxo de ar atravessa a pá, a curvatura superior acelera o ar, reduzindo a pressão estática (Princípio de Bernoulli e variação de quantidade de movimento). Essa diferença de pressão gera uma força resultante perpendicular ao vento relativo — a sustentação — que produz torque e inicia o giro.',
+    highlight: 'Conversão: Energia Cinética Translacional → Força Aerodinâmica (Torque)',
+  },
+  {
+    step: 2,
+    node: 'ROTOR',
+    title: 'ETAPA 2 — O Rotor Começa a Girar',
+    subtitle: 'Energia Mecânica de Rotação',
+    content:
+      'O rotor é o conjunto formado pelas três pás fixadas ao cubo central (hub). Sob a ação contínua do torque aerodinâmico, o rotor gira tipicamente entre 10 e 20 rotações por minuto (rpm) em turbinas de grande porte, convertendo a energia cinética do vento em energia mecânica de rotação.',
+    highlight: 'Conversão: Torque Aerodinâmico → Energia Mecânica Rotacional',
+  },
+  {
+    step: 3,
+    node: 'EIXO',
+    title: 'ETAPA 3 — O Movimento é Transmitido ao Eixo',
+    subtitle: 'Eixo Principal de Baixa Rotação',
+    content:
+      'O cubo do rotor é acoplado diretamente ao eixo principal (eixo de baixa velocidade). Este eixo robusto de aço forjado transmite toda a potência mecânica rotacional do exterior para o interior da nacele, suportando elevados esforços de torção e flexão.',
+    highlight: 'Função: Transmissão mecânica de alto torque do rotor para o trem de força',
+  },
+  {
+    step: 4,
+    node: 'MULTIPLICADORA',
+    title: 'ETAPA 4 — A Caixa Multiplicadora',
+    subtitle: 'Adequação de Rotação (ou Acionamento Direto)',
+    content:
+      'Geradores convencionais necessitam de altas rotações (cerca de 1.000 a 1.800 rpm) para gerar eletricidade na frequência da rede. A caixa multiplicadora (engrenagens planetárias) eleva a rotação em até 100 vezes. Nota: Turbinas modernas Direct Drive (acionamento direto) dispensam a caixa multiplicadora utilizando geradores multipolos de ímãs permanentes.',
+    highlight: 'Relação típica: ~15 rpm no eixo lento → ~1.500 rpm no eixo rápido',
+  },
+  {
+    step: 5,
+    node: 'GERADOR',
+    title: 'ETAPA 5 — O Gerador Elétrico (Lei de Faraday)',
+    subtitle: 'Indução Eletromagnética',
+    content:
+      'No gerador, a energia mecânica gira um rotor magnético no interior de bobinas de cobre (estator). Segundo a Lei da Indução Eletromagnética de Faraday-Lenz, a variação do fluxo magnético através de um circuito fechado induz uma força eletromotriz (tensão) e corrente elétrica alternada.',
+    formula: 'ε = -N · (ΔΦ / Δt)',
+    formulaVars: [
+      'ε: força eletromotriz induzida (V)',
+      'N: número de espiras da bobina',
+      'ΔΦ: variação do fluxo magnético (Wb)',
+      'Δt: intervalo de tempo (s)',
+    ],
+    highlight: 'Conversão Principal: Energia Mecânica → Energia Elétrica',
+  },
+  {
+    step: 6,
+    node: 'TRANSFORMADOR',
+    title: 'ETAPA 6 — Transformador e Subestação',
+    subtitle: 'Elevação de Tensão e Redução de Perdas Joule',
+    content:
+      'A eletricidade sai do gerador em baixa/média tensão (ex: 690 V). Um transformador eleva a tensão para níveis de média tensão (34,5 kV) e, na subestação do parque, para alta tensão (138 kV a 500 kV). Para uma mesma potência (P = U·I), elevar a tensão reduz a corrente (I), minimizando drasticamente as perdas térmicas por Efeito Joule (P_dissipada = R · I²).',
+    highlight: 'Física Elétrica: Maior tensão (U) → Menor corrente (I) → Menores perdas (R·I²)',
+  },
+  {
+    step: 7,
+    node: 'REDE → RESIDÊNCIAS',
+    title: 'ETAPA 7 — Distribuição de Energia',
+    subtitle: 'Do Sistema Interligado até o Consumo Final',
+    content:
+      'A energia percorre as linhas de transmissão de alta tensão até subestações abaixadoras próximas aos centros urbanos, onde é reduzida para a rede de distribuição (13,8 kV) e, finalmente, pelos transformadores dos postes para 127 V ou 220 V, alimentando residências, escolas e indústrias.',
+    highlight: 'Entrega Final: Eletricidade limpa pronta para uso imediato',
+  },
+];
+
+const FLOWCHART_CHAIN = [
+  'VENTO',
+  'PÁS',
+  'ROTOR',
+  'EIXO',
+  'GERADOR',
+  'TRANSFORMADOR',
+  'REDE ELÉTRICA',
+  'RESIDÊNCIAS',
+];
+
+const Slide04HowItWorks = () => {
+  const [activeStepIdx, setActiveStepIdx] = useState(0);
+  const current = HOW_IT_WORKS_STEPS[activeStepIdx];
+
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-5 md:px-14 pt-16 pb-14 max-w-7xl mx-auto">
+      <div className="mb-3">
+        <span className="text-xs font-bold tracking-widest uppercase text-[#42D9F5]">
+          04 • Cadeia de Conversão Energética
+        </span>
+        <h2 className="text-2xl sm:text-4xl font-bold text-[#F5F8FC] mt-0.5">
+          Como Funciona uma Usina Eólica?
+        </h2>
+      </div>
+
+      {/* Fluxograma Animado Completo */}
+      <div className="p-3 rounded-2xl bg-[#0B1D36]/80 border border-white/10 backdrop-blur-md mb-4 overflow-x-auto">
+        <div className="flex items-center justify-between min-w-[680px] gap-1">
+          {FLOWCHART_CHAIN.map((item, idx) => {
+            const isHighlighted =
+              idx === activeStepIdx || (activeStepIdx === 6 && idx >= 6);
+            return (
+              <React.Fragment key={item}>
+                <button
+                  onClick={() => setActiveStepIdx(Math.min(idx, 6))}
+                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all cursor-pointer border ${
+                    isHighlighted
+                      ? 'bg-[#42D9F5] text-[#071426] border-[#42D9F5] shadow-[0_0_15px_rgba(66,217,245,0.6)] scale-105'
+                      : 'bg-[#071426]/80 text-[#A7B7C9] border-white/10 hover:text-white'
+                  }`}
+                >
+                  {item}
+                </button>
+                {idx < FLOWCHART_CHAIN.length - 1 && (
+                  <ArrowRight
+                    className={`w-4 h-4 shrink-0 ${
+                      idx < activeStepIdx ? 'text-[#53D68A]' : 'text-[#42D9F5]/50'
+                    }`}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        {/* Seletor Lateral das 7 Etapas */}
+        <div className="lg:col-span-4 flex flex-col gap-1.5">
+          {HOW_IT_WORKS_STEPS.map((st, idx) => {
+            const active = idx === activeStepIdx;
+            return (
+              <button
+                key={st.step}
+                onClick={() => setActiveStepIdx(idx)}
+                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left transition-all cursor-pointer border ${
+                  active
+                    ? 'bg-gradient-to-r from-[#1479D4] to-[#0E5AA7] text-white border-[#42D9F5] shadow-md'
+                    : 'bg-[#0B1D36]/65 text-[#A7B7C9] border-white/10 hover:bg-[#0B1D36] hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-extrabold ${
+                      active ? 'bg-[#42D9F5] text-[#071426]' : 'bg-white/10 text-[#42D9F5]'
+                    }`}
+                  >
+                    {st.step}
+                  </span>
+                  <span className="text-xs sm:text-sm font-semibold truncate">
+                    {st.title.replace(`ETAPA ${st.step} — `, '')}
+                  </span>
+                </div>
+                <ChevronRight className={`w-4 h-4 ${active ? 'text-white' : 'opacity-40'}`} />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Painel Detalhado + Ilustração Esquemática Animada */}
+        <div className="lg:col-span-8 flex flex-col justify-between bg-[#0B1D36]/80 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#42D9F5]/15 text-[#42D9F5] border border-[#42D9F5]/30">
+                Passo {current.step} de 7 • {current.subtitle}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setActiveStepIdx((p) => Math.max(0, p - 1))}
+                  disabled={activeStepIdx === 0}
+                  className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 text-xs text-white cursor-pointer"
+                >
+                  ← Anterior
+                </button>
+                <button
+                  onClick={() => setActiveStepIdx((p) => Math.min(6, p + 1))}
+                  disabled={activeStepIdx === 6}
+                  className="px-2.5 py-1 rounded-lg bg-[#1479D4] hover:bg-[#1B88EB] disabled:opacity-30 text-xs text-white font-semibold cursor-pointer"
+                >
+                  Próxima Etapa →
+                </button>
+              </div>
+            </div>
+
+            <h3 className="text-xl sm:text-2xl font-bold text-[#F5F8FC] mb-2">
+              {current.title}
+            </h3>
+
+            <p className="text-xs sm:text-sm md:text-base text-[#F5F8FC]/90 leading-relaxed mb-3">
+              {current.content}
+            </p>
+
+            {/* Fórmula de Faraday exibida na Etapa 5 */}
+            {current.formula && (
+              <div className="p-3.5 rounded-xl bg-[#071426] border border-[#42D9F5]/45 mb-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-[#42D9F5] font-bold">
+                      Lei de Faraday-Lenz
+                    </div>
+                    <div className="text-xl sm:text-2xl font-mono font-extrabold text-white mt-0.5">
+                      {current.formula}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-[#A7B7C9]">
+                    {current.formulaVars.map((v) => (
+                      <span key={v}>• {v}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Diagrama Esquemático Animado do Fluxo de Energia */}
+          <div className="mt-2">
+            <div className="w-full h-32 rounded-xl bg-[#071426]/90 border border-white/10 p-2 overflow-hidden">
+              <svg viewBox="0 0 640 120" className="w-full h-full">
+                {/* Vento */}
+                <g opacity={activeStepIdx === 0 ? 1 : 0.45}>
+                  <line x1="15" y1="35" x2="75" y2="35" stroke="#42D9F5" strokeWidth="2.5" strokeDasharray="8 5" />
+                  <line x1="10" y1="60" x2="80" y2="60" stroke="#42D9F5" strokeWidth="2.5" strokeDasharray="8 5" />
+                  <line x1="15" y1="85" x2="75" y2="85" stroke="#42D9F5" strokeWidth="2.5" strokeDasharray="8 5" />
+                  <text x="45" y="108" fill="#42D9F5" fontSize="10" textAnchor="middle" fontWeight="bold">VENTO</text>
+                </g>
+
+                {/* Pás e Rotor */}
+                <g transform="translate(115, 55)">
+                  <line x1="0" y1="-42" x2="0" y2="42" stroke={activeStepIdx <= 1 ? '#42D9F5' : '#94A3B8'} strokeWidth="5" strokeLinecap="round" />
+                  <circle cx="0" cy="0" r="10" fill={activeStepIdx === 1 ? '#53D68A' : '#E2E8F0'} />
+                  <text x="0" y="55" fill="#F5F8FC" fontSize="10" textAnchor="middle">ROTOR/PÁS</text>
+                </g>
+
+                {/* Eixo Principal */}
+                <rect
+                  x="125"
+                  y="51"
+                  width="65"
+                  height="8"
+                  fill={activeStepIdx === 2 ? '#53D68A' : '#64748B'}
+                />
+                <text x="157" y="110" fill="#A7B7C9" fontSize="9" textAnchor="middle">EIXO</text>
+
+                {/* Caixa Multiplicadora */}
+                <rect
+                  x="190"
+                  y="37"
+                  width="55"
+                  height="36"
+                  rx="5"
+                  fill={activeStepIdx === 3 ? '#1479D4' : '#1E293B'}
+                  stroke="#42D9F5"
+                  strokeWidth="1.5"
+                />
+                <text x="217" y="59" fill="#FFF" fontSize="9" textAnchor="middle" fontWeight="bold">CAIXA</text>
+                <text x="217" y="110" fill="#A7B7C9" fontSize="9" textAnchor="middle">MULTIPL.</text>
+
+                {/* Eixo Rápido */}
+                <rect x="245" y="52" width="35" height="6" fill="#94A3B8" />
+
+                {/* Gerador Elétrico */}
+                <rect
+                  x="280"
+                  y="33"
+                  width="70"
+                  height="44"
+                  rx="7"
+                  fill={activeStepIdx === 4 ? '#1479D4' : '#1E293B'}
+                  stroke={activeStepIdx === 4 ? '#53D68A' : '#42D9F5'}
+                  strokeWidth="2"
+                />
+                <text x="315" y="59" fill="#FFF" fontSize="10" textAnchor="middle" fontWeight="bold">GERADOR</text>
+                <text x="315" y="110" fill="#A7B7C9" fontSize="9" textAnchor="middle">INDUÇÃO</text>
+
+                {/* Cabo para Transformador */}
+                <line x1="350" y1="55" x2="405" y2="55" stroke="#53D68A" strokeWidth="3" />
+
+                {/* Transformador */}
+                <rect
+                  x="405"
+                  y="35"
+                  width="65"
+                  height="40"
+                  rx="5"
+                  fill={activeStepIdx === 5 ? '#1479D4' : '#1E293B'}
+                  stroke="#53D68A"
+                  strokeWidth="1.5"
+                />
+                <text x="437" y="59" fill="#FFF" fontSize="9" textAnchor="middle" fontWeight="bold">TRAFO ↑V</text>
+                <text x="437" y="110" fill="#A7B7C9" fontSize="9" textAnchor="middle">SUBESTAÇÃO</text>
+
+                {/* Linha de Transmissão */}
+                <line x1="470" y1="55" x2="535" y2="55" stroke="#42D9F5" strokeWidth="3" strokeDasharray="6 4" />
+
+                {/* Residências */}
+                <g transform="translate(545, 32)">
+                  <polygon points="25,0 0,20 50,20" fill={activeStepIdx === 6 ? '#53D68A' : '#334155'} />
+                  <rect x="7" y="20" width="36" height="26" fill={activeStepIdx === 6 ? '#1479D4' : '#1E293B'} stroke="#42D9F5" />
+                  <rect x="19" y="28" width="12" height="10" fill={activeStepIdx === 6 ? '#FDE047' : '#475569'} />
+                  <text x="25" y="78" fill="#53D68A" fontSize="9" textAnchor="middle" fontWeight="bold">RESIDÊNCIAS</text>
+                </g>
+              </svg>
+            </div>
+            <div className="mt-2 px-3 py-1.5 rounded-lg bg-[#53D68A]/10 border border-[#53D68A]/30 text-xs text-[#53D68A] font-medium">
+              {current.highlight}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// SLIDE 05 — CONHECENDO AS PARTES DE UM AEROGERADOR (12 COMPONENTES)
+// ============================================================================
+const TURBINE_PARTS = [
+  {
+    id: 1,
+    name: '1. Pás',
+    x: 115,
+    y: 78,
+    desc: 'Superfícies aerodinâmicas projetadas com torção geométrica ao longo do comprimento para otimizar o ângulo de ataque do vento.',
+    role: 'Capturar a energia cinética do vento e gerar torque por sustentação aerodinâmica.',
+    fact: 'Em turbinas modernas offshore, uma única pá pode ultrapassar 100 metros de comprimento — maior que a envergadura de um Airbus A380.',
+  },
+  {
+    id: 2,
+    name: '2. Cubo do Rotor',
+    x: 122,
+    y: 135,
+    desc: 'Estrutura central em ferro fundido nodular onde as raízes das pás são parafusadas por meio de rolamentos de passo.',
+    role: 'Conectar mecanicamente as pás ao eixo principal e abrigar os atuadores de passo.',
+    fact: 'É protegido por uma carenagem aerodinâmica (spinner) que suaviza o fluxo de ar frontal.',
+  },
+  {
+    id: 3,
+    name: '3. Rotor',
+    x: 92,
+    y: 165,
+    desc: 'Conjunto rotativo integrado formado pelas pás e pelo cubo central.',
+    role: 'Transformar a energia cinética linear das massas de ar em movimento rotacional.',
+    fact: 'A área circular descrita pelo giro do rotor define diretamente a potência captável (A = π·R²).',
+  },
+  {
+    id: 4,
+    name: '4. Eixo Principal',
+    x: 175,
+    y: 135,
+    desc: 'Eixo maciço de aço de alta resistência sustentado por mancais principais dentro da nacele.',
+    role: 'Transmitir o elevado torque gerado pelo rotor para o sistema interno de transmissão.',
+    fact: 'Gira em baixa velocidade (10 a 20 rpm), mas suporta torques da ordem de milhões de Newton-metros.',
+  },
+  {
+    id: 5,
+    name: '5. Caixa Multiplicadora',
+    x: 235,
+    y: 132,
+    desc: 'Sistema de engrenagens de precisão (planetárias e helicoidais) imersas em óleo lubrificante filtrado e refrigerado.',
+    role: 'Aumentar a velocidade angular de rotação (~15 rpm para ~1.500 rpm) para acionar geradores convencionais.',
+    fact: 'Modelos modernos Direct Drive substituem a caixa multiplicadora por geradores síncronos multipolos.',
+  },
+  {
+    id: 6,
+    name: '6. Gerador Elétrico',
+    x: 332,
+    y: 132,
+    desc: 'Máquina elétrica rotativa composta por estator bobinado e rotor eletromagnético ou de ímãs permanentes.',
+    role: 'Converter energia mecânica de rotação em energia elétrica por indução eletromagnética.',
+    fact: 'Possui eficiência de conversão eletromagnética típica superior a 94% em carga nominal.',
+  },
+  {
+    id: 7,
+    name: '7. Nacele',
+    x: 265,
+    y: 92,
+    desc: 'Compartimento estrutural carenado instalado no topo da torre, construído em fibra de vidro reforçada sobre chassi metálico.',
+    role: 'Abrigar e proteger os componentes mecânicos, elétricos e de controle contra intempéries.',
+    fact: 'Em grandes turbinas, a nacele tem o tamanho de um ônibus e possui até heliponto ou guindaste interno de manutenção.',
+  },
+  {
+    id: 8,
+    name: '8. Torre',
+    x: 255,
+    y: 255,
+    desc: 'Coluna estrutural cônica de aço tubular, concreto protendido ou híbrida, fixada em profunda fundação de concreto armado.',
+    role: 'Sustentar a nacele e o rotor em elevadas altitudes onde os ventos são mais fortes e uniformes.',
+    fact: 'A velocidade do vento aumenta com a altura devido à redução do atrito com o solo (perfil logarítmico de vento).',
+  },
+  {
+    id: 9,
+    name: '9. Sistema de Orientação (Yaw)',
+    x: 255,
+    y: 174,
+    desc: 'Anel dentado com motores elétricos situado entre o topo da torre e a base da nacele, guiado por birutas e sensores ultrassônicos.',
+    role: 'Girar horizontalmente toda a nacele para manter o rotor sempre alinhado perpendicularmente à direção do vento.',
+    fact: 'Sensores no topo da nacele monitoram continuamente o ângulo do vento para evitar perdas por desalinhamento.',
+  },
+  {
+    id: 10,
+    name: '10. Controle de Passo (Pitch)',
+    x: 122,
+    y: 108,
+    desc: 'Mecanismo eletromecânico ou hidráulico acoplado na raiz de cada pá que permite girá-la em torno do seu próprio eixo longitudinal.',
+    role: 'Ajustar o ângulo de ataque das pás para otimizar a potência ou colocar as pás em "bandeira" em ventos extremos.',
+    fact: 'É o principal sistema de regulação aerodinâmica de potência e proteção contra tempestades.',
+  },
+  {
+    id: 11,
+    name: '11. Freio Mecânico',
+    x: 278,
+    y: 135,
+    desc: 'Disco de freio de alta capacidade com pinças hidráulicas instalado geralmente no eixo de alta velocidade.',
+    role: 'Imobilizar completamente o rotor durante paradas de emergência ou procedimentos seguros de manutenção.',
+    fact: 'Atua em conjunto com o freio aerodinâmico (sistema Pitch), que reduz primeiro 90% da rotação.',
+  },
+  {
+    id: 12,
+    name: '12. Transformador',
+    x: 375,
+    y: 152,
+    desc: 'Equipamento eletromagnético estático instalado na traseira da nacele ou na base interna da torre.',
+    role: 'Elevar a tensão elétrica gerada (ex: de 690 V para 34,5 kV) para conexão eficiente à rede coletora do parque.',
+    fact: 'Transformadores modernos instalados na nacele utilizam isolamento seco ou fluidos biodegradáveis de alto ponto de fulgor.',
+  },
+];
+
+const Slide05Parts = () => {
+  const [selectedPart, setSelectedPart] = useState(TURBINE_PARTS[0]);
+  const [hoveredId, setHoveredId] = useState(null);
+
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-5 md:px-14 pt-16 pb-14 max-w-7xl mx-auto">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <span className="text-xs font-bold tracking-widest uppercase text-[#42D9F5]">
+            05 • Engenharia Interna em Corte
+          </span>
+          <h2 className="text-2xl sm:text-4xl font-bold text-[#F5F8FC] mt-0.5">
+            Conhecendo as Partes de um Aerogerador
+          </h2>
+        </div>
+        <span className="text-xs text-[#A7B7C9]">
+          Clique nos pontos numerados no diagrama ou na lista para inspecionar
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        {/* Diagrama Técnico em Corte (SVG) */}
+        <div className="lg:col-span-7 bg-[#0B1D36]/80 border border-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col justify-between">
+          <div className="relative w-full h-64 sm:h-80 rounded-xl bg-gradient-to-b from-[#071426] to-[#0C2342] border border-white/10 overflow-hidden">
+            <svg viewBox="0 0 480 320" className="w-full h-full">
+              {/* Grade técnica de fundo */}
+              <defs>
+                <pattern id="techGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+                  <path d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(66,217,245,0.06)" strokeWidth="1" />
+                </pattern>
+              </defs>
+              <rect width="480" height="320" fill="url(#techGrid)" />
+
+              {/* Fundação e Solo */}
+              <rect x="190" y="295" width="130" height="18" rx="3" fill="#1E293B" stroke="#475569" />
+              <line x1="40" y1="295" x2="440" y2="295" stroke="#42D9F5" strokeOpacity="0.3" strokeWidth="1.5" />
+
+              {/* Torre em Corte */}
+              <polygon
+                points="232,295 278,295 268,172 242,172"
+                fill="#162E4D"
+                stroke="#94A3B8"
+                strokeWidth="1.5"
+              />
+              {/* Cabos internos descendo pela torre */}
+              <line x1="255" y1="175" x2="255" y2="295" stroke="#53D68A" strokeWidth="2.5" strokeDasharray="5 3" />
+
+              {/* Sistema Yaw (anel na base da nacele) */}
+              <rect x="238" y="167" width="34" height="9" rx="2" fill="#42D9F5" opacity="0.85" />
+
+              {/* Carcaça da Nacele em Corte */}
+              <path
+                d="M 145,102 L 385,102 Q 405,102 405,122 L 405,155 Q 405,168 388,168 L 145,168 Z"
+                fill="rgba(20, 121, 212, 0.14)"
+                stroke="#42D9F5"
+                strokeWidth="2"
+              />
+
+              {/* Pás (Superior e Inferior) */}
+              <path
+                d="M 118,125 C 110,80 112,35 122,12 C 127,35 129,80 126,125 Z"
+                fill="#E2E8F0"
+                stroke="#42D9F5"
+                strokeWidth="1.2"
+              />
+              <path
+                d="M 118,145 C 110,190 112,235 122,258 C 127,235 129,190 126,145 Z"
+                fill="#CBD5E1"
+                stroke="#42D9F5"
+                strokeWidth="1.2"
+              />
+
+              {/* Cubo e Spinner */}
+              <path
+                d="M 145,112 Q 92,135 145,158 Z"
+                fill="#F8FAFC"
+                stroke="#1479D4"
+                strokeWidth="1.5"
+              />
+
+              {/* Eixo Principal */}
+              <rect x="145" y="130" width="68" height="10" fill="#94A3B8" stroke="#F8FAFC" strokeWidth="0.6" />
+
+              {/* Caixa Multiplicadora */}
+              <rect x="213" y="116" width="46" height="38" rx="4" fill="#1D4ED8" stroke="#42D9F5" strokeWidth="1.5" />
+              <circle cx="228" cy="135" r="10" fill="none" stroke="#F8FAFC" strokeWidth="1.5" strokeDasharray="3 2" />
+              <circle cx="246" cy="135" r="7" fill="none" stroke="#53D68A" strokeWidth="1.5" />
+
+              {/* Eixo Rápido + Disco de Freio */}
+              <rect x="259" y="132" width="42" height="6" fill="#CBD5E1" />
+              <rect x="276" y="122" width="5" height="26" fill="#F59E0B" />
+
+              {/* Gerador Elétrico */}
+              <rect x="301" y="114" width="56" height="42" rx="6" fill="#0F766E" stroke="#53D68A" strokeWidth="1.8" />
+              <line x1="312" y1="120" x2="312" y2="150" stroke="#53D68A" strokeWidth="1.5" />
+              <line x1="322" y1="120" x2="322" y2="150" stroke="#53D68A" strokeWidth="1.5" />
+              <line x1="332" y1="120" x2="332" y2="150" stroke="#53D68A" strokeWidth="1.5" />
+              <line x1="342" y1="120" x2="342" y2="150" stroke="#53D68A" strokeWidth="1.5" />
+
+              {/* Transformador */}
+              <rect x="364" y="122" width="32" height="36" rx="3" fill="#334155" stroke="#42D9F5" strokeWidth="1.5" />
+
+              {/* Anemômetro / Biruta no topo traseiro da nacele */}
+              <line x1="378" y1="102" x2="378" y2="85" stroke="#A7B7C9" strokeWidth="2" />
+              <line x1="368" y1="85" x2="388" y2="85" stroke="#42D9F5" strokeWidth="2" />
+
+              {/* Marcadores Clicáveis (12 componentes) */}
+              {TURBINE_PARTS.map((part) => {
+                const isSelected = selectedPart.id === part.id;
+                const isHovered = hoveredId === part.id;
+                return (
+                  <g
+                    key={part.id}
+                    transform={`translate(${part.x}, ${part.y})`}
+                    onClick={() => setSelectedPart(part)}
+                    onMouseEnter={() => setHoveredId(part.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    className="cursor-pointer"
+                  >
+                    {(isSelected || isHovered) && (
+                      <circle r="15" fill="rgba(66,217,245,0.28)" />
+                    )}
+                    <circle
+                      r={isSelected ? '10.5' : '8.5'}
+                      fill={isSelected ? '#53D68A' : isHovered ? '#42D9F5' : '#071426'}
+                      stroke={isSelected ? '#F5F8FC' : '#42D9F5'}
+                      strokeWidth="1.8"
+                    />
+                    <text
+                      y="3.5"
+                      textAnchor="middle"
+                      fontSize="9"
+                      fontWeight="bold"
+                      fill={isSelected || isHovered ? '#071426' : '#F5F8FC'}
+                    >
+                      {part.id}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          {/* Botões rápidos dos 12 componentes */}
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 mt-3">
+            {TURBINE_PARTS.map((p) => {
+              const active = selectedPart.id === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedPart(p)}
+                  onMouseEnter={() => setHoveredId(p.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold text-left truncate transition-all cursor-pointer border ${
+                    active
+                      ? 'bg-[#53D68A] text-[#071426] border-[#53D68A] font-bold'
+                      : 'bg-white/5 text-[#A7B7C9] border-white/10 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Painel Explicativo do Componente Selecionado */}
+        <div className="lg:col-span-5 flex flex-col justify-between bg-[#0B1D36]/85 border border-[#42D9F5]/35 rounded-2xl p-5 backdrop-blur-md shadow-xl">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="px-3 py-1 rounded-full bg-[#1479D4]/30 border border-[#42D9F5]/40 text-xs font-bold text-[#42D9F5]">
+                Componente {selectedPart.id} / 12
+              </span>
+              <Settings className="w-5 h-5 text-[#42D9F5]" />
+            </div>
+
+            <h3 className="text-xl sm:text-2xl font-extrabold text-[#F5F8FC]">
+              {selectedPart.name}
+            </h3>
+
+            <div className="p-3.5 rounded-xl bg-[#071426]/80 border border-white/10 space-y-1">
+              <div className="text-xs font-bold uppercase tracking-wider text-[#42D9F5]">
+                Descrição Científica
+              </div>
+              <p className="text-xs sm:text-sm text-[#F5F8FC]/90 leading-relaxed">
+                {selectedPart.desc}
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[#1479D4]/15 border border-[#1479D4]/40 space-y-1">
+              <div className="text-xs font-bold uppercase tracking-wider text-[#53D68A]">
+                Função no Processo
+              </div>
+              <p className="text-xs sm:text-sm text-[#F5F8FC] leading-relaxed">
+                {selectedPart.role}
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-white/[0.04] border border-white/10 space-y-1">
+              <div className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" /> Curiosidade Técnica
+              </div>
+              <p className="text-xs sm:text-sm text-[#A7B7C9] leading-relaxed">
+                {selectedPart.fact}
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-4 mt-4 border-t border-white/10 flex justify-between">
+            <button
+              onClick={() =>
+                setSelectedPart(
+                  TURBINE_PARTS[(selectedPart.id - 2 + TURBINE_PARTS.length) % TURBINE_PARTS.length]
+                )
+              }
+              className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-white cursor-pointer"
+            >
+              ← Componente Anterior
+            </button>
+            <button
+              onClick={() =>
+                setSelectedPart(TURBINE_PARTS[selectedPart.id % TURBINE_PARTS.length])
+              }
+              className="px-3 py-1.5 rounded-lg bg-[#1479D4] hover:bg-[#1B88EB] text-xs text-white font-semibold cursor-pointer"
+            >
+              Próximo Componente →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+// ============================================================================
+// SLIDE 06 — SIMULADOR INTERATIVO DE UMA USINA EÓLICA
+// ============================================================================
+const Slide06Simulator = () => {
+  // Parâmetros controláveis pelo usuário
+  const [windSpeed, setWindSpeed] = useState(11); // 0 a 30 m/s
+  const [bladeLength, setBladeLength] = useState(50); // 10 a 80 m
+  const [airDensity, setAirDensity] = useState(1.225); // 0.9 a 1.3 kg/m³
+  const [cp, setCp] = useState(0.42); // Coeficiente de potência (máx Betz 0.593)
+  const [globalEfficiency, setGlobalEfficiency] = useState(88); // Eficiência eletromecânica η (%)
+  const [isRunning, setIsRunning] = useState(true);
+
+  // Parâmetros operacionais ilustrativos
+  const CUT_IN_SPEED = 3; // m/s
+  const RATED_SPEED = 12; // m/s
+  const CUT_OUT_SPEED = 25; // m/s
+
+  const handleReset = () => {
+    setWindSpeed(11);
+    setBladeLength(50);
+    setAirDensity(1.225);
+    setCp(0.42);
+    setGlobalEfficiency(88);
+    setIsRunning(true);
+  };
+
+  // Cálculos físicos em tempo real
+  const physics = useMemo(() => {
+    const area = Math.PI * Math.pow(bladeLength, 2); // m²
+    const windPowerW = 0.5 * airDensity * area * Math.pow(windSpeed, 3); // Watts
+
+    // Potência nominal de referência calculada na velocidade nominal (12 m/s)
+    const ratedWindPowerW = 0.5 * airDensity * area * Math.pow(RATED_SPEED, 3);
+    const eta = globalEfficiency / 100;
+    const ratedElectricalW = ratedWindPowerW * cp * eta;
+
+    let status = 'OPERAÇÃO NORMAL';
+    let statusColor = '#53D68A';
+    let mechanicalPowerW = 0;
+    let electricalPowerW = 0;
+    let rpm = 0;
+
+    if (windSpeed < CUT_IN_SPEED) {
+      status = 'ABAIXO DA VELOCIDADE DE PARTIDA (< 3 m/s)';
+      statusColor = '#A7B7C9';
+      mechanicalPowerW = 0;
+      electricalPowerW = 0;
+      rpm = 0;
+    } else if (windSpeed > CUT_OUT_SPEED) {
+      status = 'CORTE DE SEGURANÇA ATIVADO (> 25 m/s)';
+      statusColor = '#F87171';
+      mechanicalPowerW = 0;
+      electricalPowerW = 0;
+      rpm = 0;
+    } else if (windSpeed >= RATED_SPEED) {
+      status = 'POTÊNCIA NOMINAL (CONTROLE DE PASSO ATIVO)';
+      statusColor = '#42D9F5';
+      mechanicalPowerW = ratedWindPowerW * cp;
+      electricalPowerW = ratedElectricalW;
+      rpm = 16; // RPM nominal estabilizado pelo pitch
+    } else {
+      mechanicalPowerW = windPowerW * cp;
+      electricalPowerW = mechanicalPowerW * eta;
+      rpm = 4 + ((windSpeed - CUT_IN_SPEED) / (RATED_SPEED - CUT_IN_SPEED)) * 12;
+    }
+
+    const totalEfficiencyPct =
+      windPowerW > 0 && electricalPowerW > 0
+        ? (electricalPowerW / windPowerW) * 100
+        : 0;
+
+    return {
+      area,
+      windPowerKW: windPowerW / 1000,
+      mechanicalPowerKW: mechanicalPowerW / 1000,
+      electricalPowerKW: electricalPowerW / 1000,
+      totalEfficiencyPct,
+      status,
+      statusColor,
+      rpm: isRunning ? rpm : 0,
+    };
+  }, [windSpeed, bladeLength, airDensity, cp, globalEfficiency, isRunning]);
+
+  // Dados dinâmicos para o gráfico de curva de potência (0 a 30 m/s)
+  const powerCurveData = useMemo(() => {
+    const area = Math.PI * Math.pow(bladeLength, 2);
+    const eta = globalEfficiency / 100;
+    const ratedWindPowerKW = (0.5 * airDensity * area * Math.pow(RATED_SPEED, 3)) / 1000;
+    const ratedElecKW = ratedWindPowerKW * cp * eta;
+
+    const rows = [];
+    for (let v = 0; v <= 30; v += 1) {
+      const pVentoKW = (0.5 * airDensity * area * Math.pow(v, 3)) / 1000;
+      let pElecKW = 0;
+      if (v >= CUT_IN_SPEED && v <= CUT_OUT_SPEED) {
+        pElecKW = v >= RATED_SPEED ? ratedElecKW : pVentoKW * cp * eta;
+      }
+      rows.push({
+        v,
+        ventoKW: Math.round(pVentoKW),
+        eletricaKW: Math.round(pElecKW),
+      });
+    }
+    return rows;
+  }, [bladeLength, airDensity, cp, globalEfficiency]);
+
+  const formatPower = (kw) => {
+    if (kw >= 1000) return `${(kw / 1000).toFixed(2)} MW`;
+    return `${kw.toFixed(1)} kW`;
+  };
+
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-4 md:px-12 pt-16 pb-14 max-w-7xl mx-auto">
+      {/* Cabeçalho + Botões de Controle */}
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div>
+          <span className="text-xs font-bold tracking-widest uppercase text-[#42D9F5]">
+            06 • Laboratório Virtual Interativo
+          </span>
+          <h2 className="text-xl sm:text-3xl font-bold text-[#F5F8FC]">
+            Simulador Interativo de Usina Eólica
+          </h2>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsRunning(true)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              isRunning
+                ? 'bg-[#53D68A] text-[#071426]'
+                : 'bg-white/10 text-white hover:bg-white/20'
+            }`}
+          >
+            <Play className="w-3.5 h-3.5" /> Iniciar
+          </button>
+          <button
+            onClick={() => setIsRunning(false)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              !isRunning
+                ? 'bg-amber-400 text-[#071426]'
+                : 'bg-white/10 text-white hover:bg-white/20'
+            }`}
+          >
+            <Pause className="w-3.5 h-3.5" /> Pausar
+          </button>
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1479D4] hover:bg-[#1B88EB] text-white text-xs font-bold transition-all cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Reiniciar
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        {/* COLUNA 1: CONTROLES DESLIZANTES */}
+        <div className="lg:col-span-4 bg-[#0B1D36]/85 border border-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col justify-between space-y-3">
+          {/* Slider 1: Velocidade do Vento */}
+          <div>
+            <div className="flex justify-between text-xs font-semibold mb-1">
+              <span className="text-[#F5F8FC]">Velocidade do Vento (v)</span>
+              <span className="text-[#42D9F5] font-mono font-bold">{windSpeed.toFixed(1)} m/s</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="30"
+              step="0.5"
+              value={windSpeed}
+              onChange={(e) => setWindSpeed(parseFloat(e.target.value))}
+              className="w-full accent-[#42D9F5] cursor-pointer"
+            />
+            <div className="flex justify-between text-[10px] text-[#A7B7C9]">
+              <span>0 m/s</span>
+              <span>Partida: 3</span>
+              <span>Nominal: 12</span>
+              <span>Corte: 25</span>
+              <span>30</span>
+            </div>
+          </div>
+
+          {/* Slider 2: Comprimento das Pás */}
+          <div>
+            <div className="flex justify-between text-xs font-semibold mb-1">
+              <span className="text-[#F5F8FC]">Comprimento das Pás (R)</span>
+              <span className="text-[#42D9F5] font-mono font-bold">{bladeLength} m</span>
+            </div>
+            <input
+              type="range"
+              min="10"
+              max="80"
+              step="1"
+              value={bladeLength}
+              onChange={(e) => setBladeLength(parseInt(e.target.value, 10))}
+              className="w-full accent-[#42D9F5] cursor-pointer"
+            />
+            <div className="flex justify-between text-[10px] text-[#A7B7C9]">
+              <span>10 m (Pequeno porte)</span>
+              <span>80 m (Grande porte)</span>
+            </div>
+          </div>
+
+          {/* Slider 3: Densidade do Ar */}
+          <div>
+            <div className="flex justify-between text-xs font-semibold mb-1">
+              <span className="text-[#F5F8FC]">Densidade do Ar (ρ)</span>
+              <span className="text-[#42D9F5] font-mono font-bold">{airDensity.toFixed(3)} kg/m³</span>
+            </div>
+            <input
+              type="range"
+              min="0.9"
+              max="1.3"
+              step="0.005"
+              value={airDensity}
+              onChange={(e) => setAirDensity(parseFloat(e.target.value))}
+              className="w-full accent-[#42D9F5] cursor-pointer"
+            />
+            <div className="flex justify-between text-[10px] text-[#A7B7C9]">
+              <span>0,90 (Altitude/Quente)</span>
+              <span>1,225 (Nível do mar)</span>
+              <span>1,30</span>
+            </div>
+          </div>
+
+          {/* Slider 4: Coeficiente de Potência Cp */}
+          <div>
+            <div className="flex justify-between text-xs font-semibold mb-1">
+              <span className="text-[#F5F8FC]">Coeficiente Aerodinâmico (C<sub>p</sub>)</span>
+              <span className="text-[#53D68A] font-mono font-bold">
+                {cp.toFixed(3)} {cp >= 0.593 ? '(Limite de Betz)' : ''}
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0.1"
+              max="0.593"
+              step="0.003"
+              value={cp}
+              onChange={(e) => setCp(Math.min(0.593, parseFloat(e.target.value)))}
+              className="w-full accent-[#53D68A] cursor-pointer"
+            />
+            <div className="text-[10px] text-[#A7B7C9]">
+              Máximo físico teórico = 0,593 (16/27). Na prática depende do projeto e operação.
+            </div>
+          </div>
+
+          {/* Slider 5: Eficiência Eletromecânica η */}
+          <div>
+            <div className="flex justify-between text-xs font-semibold mb-1">
+              <span className="text-[#F5F8FC]">Eficiência Eletromecânica (η)</span>
+              <span className="text-[#42D9F5] font-mono font-bold">{globalEfficiency}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={globalEfficiency}
+              onChange={(e) => setGlobalEfficiency(parseInt(e.target.value, 10))}
+              className="w-full accent-[#42D9F5] cursor-pointer"
+            />
+            <div className="text-[10px] text-[#A7B7C9]">
+              Fórmula: P<sub>elétrica</sub> = P<sub>vento</sub> · C<sub>p</sub> · η (Parâmetros ilustrativos)
+            </div>
+          </div>
+        </div>
+
+        {/* COLUNA 2: VISUALIZAÇÃO ANIMADA DA TURBINA E STATUS */}
+        <div className="lg:col-span-4 bg-[#0B1D36]/85 border border-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span
+              style={{ color: physics.statusColor, borderColor: `${physics.statusColor}55` }}
+              className="px-2.5 py-1 rounded-full text-[11px] font-bold border bg-[#071426]/90 truncate"
+            >
+              ● {physics.status}
+            </span>
+          </div>
+
+          {/* Cena SVG da Turbina e Rede */}
+          <div className="relative w-full h-56 rounded-xl bg-gradient-to-b from-[#071426] via-[#0B2240] to-[#0E2E52] border border-white/10 overflow-hidden">
+            <svg viewBox="0 0 320 230" className="w-full h-full">
+              {/* Solo */}
+              <rect x="0" y="205" width="320" height="25" fill="#091C34" />
+
+              {/* Linhas de Vento dinâmicas */}
+              {isRunning && windSpeed > 0 && (
+                <g opacity={Math.min(0.9, 0.2 + windSpeed / 30)}>
+                  <line x1="12" y1="45" x2="85" y2="45" stroke="#42D9F5" strokeWidth="1.8" strokeDasharray="10 6" />
+                  <line x1="8" y1="85" x2="90" y2="85" stroke="#42D9F5" strokeWidth="2.2" strokeDasharray="12 6" />
+                  <line x1="18" y1="125" x2="80" y2="125" stroke="#42D9F5" strokeWidth="1.6" strokeDasharray="8 6" />
+                </g>
+              )}
+
+              {/* Turbina com escala de pás proporcional a bladeLength */}
+              <AnimatedTurbineSVG
+                x={125}
+                y={62}
+                scale={0.95}
+                rpm={physics.rpm}
+                bladeLengthFactor={0.45 + (bladeLength / 80) * 0.65}
+              />
+
+              {/* Cabo de energia até a casa */}
+              <path
+                d="M 125,205 L 255,205 L 255,188"
+                stroke={physics.electricalPowerKW > 0 ? '#53D68A' : '#334155'}
+                strokeWidth="3"
+                strokeDasharray={physics.electricalPowerKW > 0 ? '6 4' : 'none'}
+                fill="none"
+              />
+
+              {/* Casa receptora */}
+              <g transform="translate(232, 152)">
+                <polygon points="23,0 0,18 46,18" fill="#1E3A5F" />
+                <rect x="6" y="18" width="34" height="24" fill="#0F294A" stroke="#42D9F5" strokeWidth="1" />
+                <rect
+                  x="17"
+                  y="24"
+                  width="12"
+                  height="10"
+                  fill={physics.electricalPowerKW > 0 ? '#FDE047' : '#334155'}
+                />
+              </g>
+            </svg>
+
+            {/* Indicador de Rotação no canto */}
+            <div className="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-lg bg-[#071426]/85 border border-white/10 text-xs font-mono text-[#42D9F5]">
+              {physics.rpm.toFixed(1)} RPM
+            </div>
+          </div>
+
+          {/* Grade de 6 Resultados em Tempo Real */}
+          <div className="grid grid-cols-2 gap-2 mt-3">
+            <div className="p-2.5 rounded-xl bg-[#071426]/85 border border-white/10">
+              <div className="text-[10px] text-[#A7B7C9]">Área Varrida (A = π·R²)</div>
+              <div className="text-sm font-bold text-[#F5F8FC] font-mono">
+                {Math.round(physics.area).toLocaleString('pt-BR')} m²
+              </div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-[#071426]/85 border border-white/10">
+              <div className="text-[10px] text-[#A7B7C9]">Eficiência Global (C<sub>p</sub>·η)</div>
+              <div className="text-sm font-bold text-[#42D9F5] font-mono">
+                {physics.totalEfficiencyPct.toFixed(1)}%
+              </div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-[#071426]/85 border border-white/10">
+              <div className="text-[10px] text-[#A7B7C9]">Potência no Vento</div>
+              <div className="text-sm font-bold text-[#F5F8FC] font-mono">
+                {formatPower(physics.windPowerKW)}
+              </div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-[#071426]/85 border border-white/10">
+              <div className="text-[10px] text-[#A7B7C9]">Potência Mecânica</div>
+              <div className="text-sm font-bold text-[#42D9F5] font-mono">
+                {formatPower(physics.mechanicalPowerKW)}
+              </div>
+            </div>
+            <div className="col-span-2 p-3 rounded-xl bg-gradient-to-r from-[#53D68A]/20 to-[#1479D4]/20 border border-[#53D68A]/50 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-bold uppercase text-[#53D68A]">
+                  Potência Elétrica Estimada
+                </div>
+                <div className="text-[10px] text-[#A7B7C9]">
+                  Vento: {windSpeed} m/s • R: {bladeLength} m
+                </div>
+              </div>
+              <div className="text-xl sm:text-2xl font-extrabold text-[#53D68A] font-mono">
+                {formatPower(physics.electricalPowerKW)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* COLUNA 3: GRÁFICO DINÂMICO DE POTÊNCIA */}
+        <div className="lg:col-span-4 bg-[#0B1D36]/85 border border-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-[#F5F8FC]">
+              Curva Dinâmica de Potência
+            </h3>
+            <p className="text-[11px] text-[#A7B7C9]">
+              Comparação entre potência cúbica disponível no vento e curva elétrica operacional da turbina.
+            </p>
+          </div>
+
+          <div className="w-full h-60 my-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={powerCurveData} margin={{ top: 10, right: 12, left: -12, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                <XAxis dataKey="v" stroke="#A7B7C9" tick={{ fontSize: 10 }} unit="m/s" />
+                <YAxis
+                  stroke="#A7B7C9"
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={(val) => (val >= 1000 ? `${(val / 1000).toFixed(0)}MW` : `${val}k`)}
+                />
+                <RechartsTooltip
+                  contentStyle={{
+                    backgroundColor: '#071426',
+                    borderColor: '#42D9F5',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                  }}
+                  formatter={(val, name) => [
+                    formatPower(Number(val)),
+                    name === 'ventoKW' ? 'Potência no Vento' : 'Potência Elétrica',
+                  ]}
+                  labelFormatter={(l) => `Vento: ${l} m/s`}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px' }} />
+                <Line
+                  type="monotone"
+                  dataKey="ventoKW"
+                  name="Vento (Cúbica)"
+                  stroke="#42D9F5"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="eletricaKW"
+                  name="Elétrica Estimada"
+                  stroke="#53D68A"
+                  strokeWidth={2.5}
+                  dot={false}
+                />
+                <ReferenceLine x={windSpeed} stroke="#F5F8FC" strokeDasharray="3 3" />
+                <ReferenceDot
+                  x={windSpeed}
+                  y={Math.round(physics.electricalPowerKW)}
+                  r={5}
+                  fill="#53D68A"
+                  stroke="#FFFFFF"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] text-[#A7B7C9] leading-snug">
+            Observe como entre <strong className="text-white">3 e 12 m/s</strong> a geração cresce rapidamente, estabiliza na potência nominal e zera acima de <strong className="text-red-300">25 m/s</strong> por segurança estrutural.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// SLIDE 07 — O LIMITE DE BETZ
+// ============================================================================
+const Slide07Betz = () => {
+  const [extractionMode, setExtractionMode] = useState('ideal'); // 'low' | 'ideal' | 'blocked'
+
+  const modeConfig = {
+    low: {
+      label: 'Baixa Extração (Cp ≈ 0,25)',
+      vBefore: '12,0 m/s',
+      vAfter: '9,8 m/s',
+      expansion: 14,
+      desc: 'O ar passa quase sem desacelerar pela turbina; grande parte da energia cinética continua no escoamento sem ser aproveitada.',
+    },
+    ideal: {
+      label: 'Limite de Betz (Cp = 16/27 ≈ 59,3%)',
+      vBefore: '12,0 m/s',
+      vAfter: '4,0 m/s (1/3 de v₁)',
+      expansion: 34,
+      desc: 'Máximo teórico demonstrado por Albert Betz (1919): ocorre quando a velocidade do vento após o rotor reduz para 1/3 da velocidade inicial. A seção do tubo de ar expande para conservar a massa (Q = A·v).',
+    },
+    blocked: {
+      label: 'Bloqueio Total (Impossível: Cp = 0)',
+      vBefore: '12,0 m/s',
+      vAfter: '0 m/s (Ar parado)',
+      expansion: 58,
+      desc: 'Se o rotor extraísse 100% da energia, a velocidade final seria zero. O ar ficaria estagnado atrás das pás, bloqueando a entrada de novo ar e impedindo o funcionamento da turbina.',
+    },
+  }[extractionMode];
+
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-5 md:px-14 pt-16 pb-14 max-w-7xl mx-auto">
+      <div className="mb-3">
+        <span className="text-xs font-bold tracking-widest uppercase text-[#42D9F5]">
+          07 • Limite Termodinâmico e Aerodinâmico
+        </span>
+        <h2 className="text-2xl sm:text-4xl font-bold text-[#F5F8FC] mt-0.5">
+          O Limite de Betz
+        </h2>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        {/* Explicação Científica */}
+        <div className="lg:col-span-5 flex flex-col justify-between bg-[#0B1D36]/80 border border-white/10 rounded-2xl p-5 backdrop-blur-md space-y-3">
+          <div className="p-4 rounded-xl bg-gradient-to-r from-[#1479D4]/25 to-[#42D9F5]/15 border border-[#42D9F5]/40 text-center">
+            <div className="text-xs uppercase tracking-widest text-[#42D9F5] font-bold">
+              Coeficiente Máximo Teórico
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-white font-mono mt-1">
+              C<sub>p máx</sub> = 16 / 27 ≈ 59,3%
+            </div>
+          </div>
+
+          <div className="space-y-2.5 text-xs sm:text-sm text-[#F5F8FC]/90 leading-relaxed">
+            <p>
+              <strong className="text-[#42D9F5]">Por que o ar não pode parar?</strong> Pela lei da conservação da massa (equação da continuidade), todo o ar que entra no rotor precisa sair pelo outro lado. Se a velocidade após a turbina caísse a zero, o ar se acumularia e desviaria ao redor da turbina.
+            </p>
+            <p>
+              <strong className="text-[#53D68A]">Turbinas Reais vs. Limite Teórico:</strong> Aerogeradores comerciais modernos atingem coeficientes de potência entre <strong className="text-white">35% e 48%</strong> (cerca de 70% a 80% do limite de Betz), devido ao arrasto aerodinâmico das pás, vórtices de ponta e perda de esteira rotacional.
+            </p>
+          </div>
+
+          <div className="p-3 rounded-xl bg-[#071426]/80 border border-white/10 text-xs text-[#A7B7C9]">
+            <strong className="text-white">Princípio Físico:</strong> Para desacelerar o ar sem interromper o fluxo, a área da coluna de ar expande após cruzar o rotor (A₂ &gt; A₁).
+          </div>
+        </div>
+
+        {/* Simulação Visual do Tubo de Corrente (Streamtube) */}
+        <div className="lg:col-span-7 flex flex-col justify-between bg-[#0B1D36]/80 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#F5F8FC]">
+              Escoamento Antes, Durante e Depois do Rotor
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { id: 'low', label: 'Pouca Extração' },
+                { id: 'ideal', label: 'Limite de Betz (59,3%)' },
+                { id: 'blocked', label: 'Bloqueio (0%)' },
+              ].map((btn) => (
+                <button
+                  key={btn.id}
+                  onClick={() => setExtractionMode(btn.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    extractionMode === btn.id
+                      ? 'bg-[#42D9F5] text-[#071426]'
+                      : 'bg-white/10 text-[#A7B7C9] hover:text-white'
+                  }`}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Diagrama SVG do Tubo de Corrente */}
+          <div className="w-full h-56 rounded-xl bg-[#071426] border border-white/10 p-2 overflow-hidden">
+            <svg viewBox="0 0 600 220" className="w-full h-full">
+              {/* Zonas verticais */}
+              <line x1="290" y1="15" x2="290" y2="205" stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />
+
+              {/* Tubo de corrente expandindo */}
+              <path
+                d={`M 40,75 Q 180,75 290,${75 - modeConfig.expansion * 0.45} Q 420,${75 - modeConfig.expansion} 560,${75 - modeConfig.expansion}`}
+                fill="none"
+                stroke="#42D9F5"
+                strokeWidth="2.5"
+              />
+              <path
+                d={`M 40,145 Q 180,145 290,${145 + modeConfig.expansion * 0.45} Q 420,${145 + modeConfig.expansion} 560,${145 + modeConfig.expansion}`}
+                fill="none"
+                stroke="#42D9F5"
+                strokeWidth="2.5"
+              />
+
+              {/* Linhas de fluxo internas */}
+              <path
+                d={`M 40,98 Q 180,98 290,${98 - modeConfig.expansion * 0.18} Q 420,${98 - modeConfig.expansion * 0.4} 560,${98 - modeConfig.expansion * 0.4}`}
+                fill="none"
+                stroke="#53D68A"
+                strokeWidth="1.6"
+                strokeDasharray="10 6"
+              />
+              <path
+                d={`M 40,122 Q 180,122 290,${122 + modeConfig.expansion * 0.18} Q 420,${122 + modeConfig.expansion * 0.4} 560,${122 + modeConfig.expansion * 0.4}`}
+                fill="none"
+                stroke="#53D68A"
+                strokeWidth="1.6"
+                strokeDasharray="10 6"
+              />
+
+              {/* Plano do Rotor */}
+              <rect x="286" y="55" width="8" height="110" rx="4" fill="#F8FAFC" stroke="#42D9F5" strokeWidth="1.5" />
+              <rect x="292" y="106" width="18" height="8" rx="2" fill="#94A3B8" />
+              <polygon points="297,114 305,114 308,200 294,200" fill="#334155" />
+
+              {/* Rótulos das 3 regiões */}
+              <text x="120" y="30" fill="#42D9F5" fontSize="11" fontWeight="bold" textAnchor="middle">
+                1. ANTES DA TURBINA
+              </text>
+              <text x="120" y="45" fill="#F5F8FC" fontSize="10" textAnchor="middle">
+                v₁ = {modeConfig.vBefore} (Alta Energia)
+              </text>
+
+              <text x="290" y="30" fill="#53D68A" fontSize="11" fontWeight="bold" textAnchor="middle">
+                2. NO ROTOR
+              </text>
+              <text x="290" y="45" fill="#F5F8FC" fontSize="10" textAnchor="middle">
+                Extração Cinética
+              </text>
+
+              <text x="470" y="30" fill="#A7B7C9" fontSize="11" fontWeight="bold" textAnchor="middle">
+                3. DEPOIS DA TURBINA
+              </text>
+              <text x="470" y="45" fill="#F5F8FC" fontSize="10" textAnchor="middle">
+                v₂ = {modeConfig.vAfter}
+              </text>
+            </svg>
+          </div>
+
+          <div className="mt-3 p-3.5 rounded-xl bg-[#1479D4]/15 border border-[#42D9F5]/30">
+            <div className="text-sm font-bold text-[#42D9F5] mb-1">{modeConfig.label}</div>
+            <p className="text-xs sm:text-sm text-[#F5F8FC]/90 leading-relaxed">
+              {modeConfig.desc}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// SLIDE 08 — TIPOS DE USINAS EÓLICAS
+// ============================================================================
+const WIND_TYPES = [
+  {
+    id: 'onshore',
+    category: 'Quanto à Localização',
+    title: 'Usinas Terrestres (Onshore)',
+    icon: Mountain,
+    badge: 'Mais Difundida',
+    points: [
+      'Instaladas em terra firme (planaltos, serras, regiões costeiras e campos abertos).',
+      'Menor custo de implantação, acesso logístico simplificado e manutenção mais rápida.',
+      'Sujeitas à rugosidade do relevo, que pode gerar maior turbulência atmosférica.',
+    ],
+  },
+  {
+    id: 'offshore',
+    category: 'Quanto à Localização',
+    title: 'Usinas Marítimas (Offshore)',
+    icon: Anchor,
+    badge: 'Alta Capacidade',
+    points: [
+      'Instaladas no mar (plataformas fixas no leito marinho ou flutuantes em águas profundas).',
+      'Aproveitam ventos oceânicos muito mais fortes, constantes e com baixa turbulência.',
+      'Exigem fundações complexas, cabos submarinos e manutenção marítima especializada.',
+    ],
+  },
+  {
+    id: 'hawt',
+    category: 'Quanto ao Eixo de Rotação',
+    title: 'Eixo Horizontal (HAWT)',
+    icon: Wind,
+    badge: 'Padrão Comercial',
+    points: [
+      'Eixo do rotor paralelo ao solo; representa a quase totalidade dos parques comerciais.',
+      'Maior eficiência aerodinâmica (Cp elevado) e torres altas que captam ventos superiores.',
+      'Requer sistema ativo de orientação (Yaw) para alinhar o rotor à direção do vento.',
+    ],
+  },
+  {
+    id: 'vawt',
+    category: 'Quanto ao Eixo de Rotação',
+    title: 'Eixo Vertical (VAWT)',
+    icon: RefreshCw,
+    badge: 'Aplicações Específicas',
+    points: [
+      'Eixo de rotação perpendicular ao solo (modelos Darrieus e Savonius).',
+      'Capta ventos vindos de qualquer direção sem precisar de sistema de orientação (Yaw).',
+      'Gerador instalado próximo ao solo facilita manutenção, porém possui menor eficiência global.',
+    ],
+  },
+];
+
+const Slide08Types = () => {
+  const [selectedId, setSelectedId] = useState('onshore');
+
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-5 md:px-14 pt-16 pb-14 max-w-7xl mx-auto">
+      <div className="mb-4">
+        <span className="text-xs font-bold tracking-widest uppercase text-[#42D9F5]">
+          08 • Classificação Tecnológica e Geográfica
+        </span>
+        <h2 className="text-2xl sm:text-4xl font-bold text-[#F5F8FC] mt-0.5">
+          Tipos de Usinas Eólicas
+        </h2>
+      </div>
+
+      {/* Grade dos 4 Tipos com Ilustrações Vetoriais */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {WIND_TYPES.map((item) => {
+          const Icon = item.icon;
+          const isSelected = selectedId === item.id;
+          return (
+            <div
+              key={item.id}
+              onClick={() => setSelectedId(item.id)}
+              className={`rounded-2xl p-4 transition-all cursor-pointer border flex flex-col justify-between backdrop-blur-md ${
+                isSelected
+                  ? 'bg-gradient-to-b from-[#1479D4]/30 to-[#0B1D36]/95 border-[#42D9F5] shadow-[0_0_25px_rgba(66,217,245,0.25)] -translate-y-1'
+                  : 'bg-[#0B1D36]/75 border-white/10 hover:border-white/30'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#A7B7C9]">
+                    {item.category}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#42D9F5]/15 text-[#42D9F5]">
+                    {item.badge}
+                  </span>
+                </div>
+
+                {/* Ilustração SVG dedicada */}
+                <div className="w-full h-32 rounded-xl bg-[#071426] border border-white/10 mb-3 overflow-hidden">
+                  <svg viewBox="0 0 200 130" className="w-full h-full">
+                    {item.id === 'onshore' && (
+                      <>
+                        <path d="M0,130 L0,98 Q80,82 200,96 L200,130 Z" fill="#134E4A" />
+                        <AnimatedTurbineSVG x={75} y={32} scale={0.45} rpm={14} />
+                        <AnimatedTurbineSVG x={140} y={28} scale={0.5} rpm={15} />
+                      </>
+                    )}
+                    {item.id === 'offshore' && (
+                      <>
+                        <rect x="0" y="92" width="200" height="38" fill="#0369A1" opacity="0.65" />
+                        <path d="M0,92 Q25,87 50,92 T100,92 T150,92 T200,92" stroke="#42D9F5" fill="none" strokeWidth="1.5" />
+                        <rect x="94" y="84" width="12" height="24" fill="#F59E0B" />
+                        <AnimatedTurbineSVG x={100} y={22} scale={0.48} rpm={18} />
+                      </>
+                    )}
+                    {item.id === 'hawt' && (
+                      <>
+                        <line x1="25" y1="115" x2="175" y2="115" stroke="#475569" strokeWidth="2" />
+                        <AnimatedTurbineSVG x={105} y={35} scale={0.55} rpm={15} showAirflow={true} />
+                        <line x1="70" y1="35" x2="135" y2="35" stroke="#53D68A" strokeDasharray="3 3" strokeWidth="1.2" />
+                      </>
+                    )}
+                    {item.id === 'vawt' && (
+                      <>
+                        <line x1="25" y1="115" x2="175" y2="115" stroke="#475569" strokeWidth="2" />
+                        {/* Torre vertical */}
+                        <rect x="97" y="25" width="6" height="90" fill="#CBD5E1" />
+                        {/* Pás curvas tipo Darrieus */}
+                        <path d="M100,32 C62,48 62,82 100,96" fill="none" stroke="#42D9F5" strokeWidth="3" />
+                        <path d="M100,32 C138,48 138,82 100,96" fill="none" stroke="#42D9F5" strokeWidth="3" />
+                        <rect x="88" y="102" width="24" height="13" rx="2" fill="#1479D4" />
+                      </>
+                    )}
+                  </svg>
+                </div>
+
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon className="w-5 h-5 text-[#42D9F5] shrink-0" />
+                  <h3 className="text-base font-bold text-[#F5F8FC]">{item.title}</h3>
+                </div>
+
+                <ul className="space-y-1.5 text-xs text-[#A7B7C9] leading-relaxed">
+                  {item.points.map((pt, i) => (
+                    <li key={i} className="flex items-start gap-1.5">
+                      <span className="text-[#42D9F5] mt-0.5">•</span>
+                      <span>{pt}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// SLIDE 09 — VANTAGENS E DESVANTAGENS
+// ============================================================================
+const PROS_LIST = [
+  {
+    title: 'Fonte Inesgotável e Renovável',
+    detail: 'Movida pelo aquecimento solar diferencial da atmosfera terrestre, sem esgotamento de reservas naturais.',
+  },
+  {
+    title: 'Baixíssimas Emissões de GEE',
+    detail: 'Não há queima de combustíveis durante a geração de eletricidade, evitando emissões diretas de CO₂.',
+  },
+  {
+    title: 'Custo Zero de Combustível',
+    detail: 'Após a instalação, o insumo primário (o vento) é gratuito, garantindo previsibilidade operacional.',
+  },
+  {
+    title: 'Complementaridade Energética',
+    detail: 'No Brasil, os ventos mais intensos ocorrem no período seco, complementando perfeitamente as hidrelétricas.',
+  },
+  {
+    title: 'Redução da Dependência Fóssil',
+    detail: 'Substitui usinas termelétricas a gás, carvão ou óleo diesel, aumentando a segurança energética.',
+  },
+  {
+    title: 'Uso Múltiplo do Solo',
+    detail: 'As turbinas ocupam pequena área na base, permitindo agricultura e pecuária no entorno.',
+  },
+];
+
+const CONS_LIST = [
+  {
+    title: 'Variabilidade e Intermitência',
+    detail: 'A geração depende da intensidade dos ventos, exigindo gestão dinâmica da rede ou armazenamento.',
+  },
+  {
+    title: 'Estudos Ambientais Rigorosos',
+    detail: 'Demanda licenciamento detalhado para preservação de dunas, vegetação nativa e recursos hídricos.',
+  },
+  {
+    title: 'Impacto sobre Fauna Aérea',
+    detail: 'Risco de colisão para determinadas espécies de aves e morcegos se rotas migratórias não forem respeitadas.',
+  },
+  {
+    title: 'Impacto Visual e Sonoro',
+    detail: 'Ruído aerodinâmico das pás e alteração da paisagem exigem distanciamento mínimo de áreas residenciais.',
+  },
+  {
+    title: 'Infraestrutura de Transmissão',
+    detail: 'Parques frequentemente ficam em regiões remotas, exigindo longas linhas de alta tensão para escoamento.',
+  },
+  {
+    title: 'Alto Investimento Inicial (CAPEX)',
+    detail: 'Custos elevados de fabricação, transporte de componentes gigantes e guindastes de montagem.',
+  },
+];
+
+const Slide09ProsCons = () => {
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-5 md:px-14 pt-16 pb-14 max-w-7xl mx-auto">
+      <div className="mb-4">
+        <span className="text-xs font-bold tracking-widest uppercase text-[#42D9F5]">
+          09 • Análise Socioambiental e Técnica
+        </span>
+        <h2 className="text-2xl sm:text-4xl font-bold text-[#F5F8FC] mt-0.5">
+          Vantagens e Desafios da Energia Eólica
+        </h2>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Coluna Vantagens */}
+        <div className="bg-[#0B1D36]/80 border border-[#53D68A]/40 rounded-2xl p-5 backdrop-blur-md">
+          <div className="flex items-center gap-2.5 mb-3 pb-2.5 border-b border-[#53D68A]/25">
+            <div className="p-2 rounded-xl bg-[#53D68A]/20 text-[#53D68A]">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-[#53D68A]">Vantagens</h3>
+              <p className="text-xs text-[#A7B7C9]">Benefícios climáticos, econômicos e energéticos</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {PROS_LIST.map((item) => (
+              <div
+                key={item.title}
+                className="p-3 rounded-xl bg-[#53D68A]/[0.07] border border-[#53D68A]/25 hover:bg-[#53D68A]/[0.13] transition-colors"
+              >
+                <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#F5F8FC] mb-1">
+                  <CheckCircle2 className="w-4 h-4 text-[#53D68A] shrink-0" />
+                  <span>{item.title}</span>
+                </div>
+                <p className="text-xs text-[#A7B7C9] leading-snug">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Coluna Desvantagens e Desafios */}
+        <div className="bg-[#0B1D36]/80 border border-amber-400/35 rounded-2xl p-5 backdrop-blur-md">
+          <div className="flex items-center gap-2.5 mb-3 pb-2.5 border-b border-amber-400/25">
+            <div className="p-2 rounded-xl bg-amber-400/20 text-amber-300">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-amber-300">Desvantagens e Desafios</h3>
+              <p className="text-xs text-[#A7B7C9]">Limitações técnicas e mitigação ambiental</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {CONS_LIST.map((item) => (
+              <div
+                key={item.title}
+                className="p-3 rounded-xl bg-amber-400/[0.06] border border-amber-400/20 hover:bg-amber-400/[0.12] transition-colors"
+              >
+                <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#F5F8FC] mb-1">
+                  <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0" />
+                  <span>{item.title}</span>
+                </div>
+                <p className="text-xs text-[#A7B7C9] leading-snug">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// SLIDE 10 — USINAS EÓLICAS NO BRASIL
+// ============================================================================
+const BRAZIL_REGIONS = [
+  {
+    id: 'nordeste',
+    name: 'Região Nordeste (Líder Nacional)',
+    states: 'Bahia (BA), Rio Grande do Norte (RN), Piauí (PI), Ceará (CE), Pernambuco (PE) e Paraíba (PB)',
+    share: '~85% a 90% da geração eólica brasileira',
+    climate:
+      'Recebe os ventos alísios constantes que sopram do Oceano Atlântico em direção ao continente, com direção estável, baixa turbulência e altíssimo fator de capacidade (frequentemente acima de 50% no inverno/primavera).',
+    sin: 'Complementa perfeitamente o Sistema Interligado Nacional (SIN), atingindo pico de geração justamente entre junho e novembro, período de estiagem nas bacias hidrelétricas do Sudeste/Centro-Oeste.',
+  },
+  {
+    id: 'sul',
+    name: 'Região Sul (Pioneirismo e Ventos Costeiros)',
+    states: 'Rio Grande do Sul (RS) e Santa Catarina (SC)',
+    share: '~9% a 11% da capacidade instalada',
+    climate:
+      'Influenciada por frentes frias, ciclones extratropicais e brisas marítimas intensas no litoral gaúcho (Osório, Chuí, Santa Vitória do Palmar) e nos campos elevados de Santa Catarina (Bom Jardim da Serra).',
+    sin: 'Importante polo de geração distribuída e parques conectados à malha sul do SIN, diversificando a matriz regional.',
+  },
+  {
+    id: 'sudeste_norte',
+    name: 'Litoral Norte e Potencial Offshore',
+    states: 'Maranhão (MA), Rio de Janeiro (RJ) e Espírito Santo (ES)',
+    share: 'Expansão em fronteiras terrestres e projetos Offshore',
+    climate:
+      'O litoral do Maranhão (Barreirinhas/Paulino Neves) apresenta excelente regime de ventos. Além disso, a costa brasileira (NE, SE e Sul) possui imenso potencial técnico para futuros parques eólicos offshore.',
+    sin: 'Próximo aos grandes centros de carga do Sudeste, os projetos offshore na Bacia de Campos e litoral do ES despertam forte interesse estratégico.',
+  },
+];
+
+const Slide10Brazil = () => {
+  const [selectedRegion, setSelectedRegion] = useState(BRAZIL_REGIONS[0]);
+
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-5 md:px-14 pt-16 pb-14 max-w-7xl mx-auto">
+      <div className="mb-3">
+        <span className="text-xs font-bold tracking-widest uppercase text-[#42D9F5]">
+          10 • Panorama Energético Nacional
+        </span>
+        <h2 className="text-2xl sm:text-4xl font-bold text-[#F5F8FC] mt-0.5">
+          Usinas Eólicas no Brasil
+        </h2>
+      </div>
+
+      {/* Indicadores Estatísticos com Fontes Reais */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div className="p-3.5 rounded-2xl bg-[#0B1D36]/85 border border-[#53D68A]/40 backdrop-blur-md">
+          <div className="text-xs text-[#A7B7C9]">Capacidade Instalada no Brasil</div>
+          <div className="text-xl sm:text-2xl font-extrabold text-[#53D68A] mt-0.5">
+            &gt; 32 GW (2ª maior fonte)
+          </div>
+          <div className="text-[11px] text-[#A7B7C9] mt-0.5">
+            Atrás apenas da hidrelétrica (Fontes: ANEEL / ABEEólica, 2024–2025)
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-[#0B1D36]/85 border border-[#42D9F5]/40 backdrop-blur-md">
+          <div className="text-xs text-[#A7B7C9]">Participação na Matriz Elétrica</div>
+          <div className="text-xl sm:text-2xl font-extrabold text-[#42D9F5] mt-0.5">
+            ~15% a 16% da potência
+          </div>
+          <div className="text-[11px] text-[#A7B7C9] mt-0.5">
+            Mais de 1.000 parques em operação (Fontes: EPE / ONS / ANEEL)
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-[#0B1D36]/85 border border-[#1479D4]/40 backdrop-blur-md">
+          <div className="text-xs text-[#A7B7C9]">Qualidade dos Ventos Brasileiros</div>
+          <div className="text-xl sm:text-2xl font-extrabold text-[#F5F8FC] mt-0.5">
+            Fator de Capacidade &gt; 42%
+          </div>
+          <div className="text-[11px] text-[#A7B7C9] mt-0.5">
+            Superior à média mundial (~25%–30%) (Fonte: ABEEólica / ONS)
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        {/* Mapa Interativo do Brasil */}
+        <div className="lg:col-span-5 bg-[#0B1D36]/80 border border-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#42D9F5]">
+              Mapa de Potencial Eólico (Clique na Região)
+            </span>
+          </div>
+
+          <div className="relative w-full h-60 flex items-center justify-center bg-[#071426]/80 rounded-xl border border-white/10 p-2">
+            <svg viewBox="0 0 320 300" className="w-full h-full max-h-56">
+              {/* Silhueta esquemática estilizada das macrorregiões do Brasil */}
+              {/* Norte */}
+              <path
+                d="M 45,70 L 125,35 L 175,65 L 165,120 L 95,125 L 40,105 Z"
+                fill="#112947"
+                stroke="#334155"
+                strokeWidth="1.5"
+              />
+              <text x="108" y="88" fill="#64748B" fontSize="10" textAnchor="middle">NORTE</text>
+
+              {/* Centro-Oeste */}
+              <path
+                d="M 95,125 L 165,120 L 180,185 L 125,195 L 100,160 Z"
+                fill="#112947"
+                stroke="#334155"
+                strokeWidth="1.5"
+              />
+              <text x="140" y="160" fill="#64748B" fontSize="9" textAnchor="middle">C-OESTE</text>
+
+              {/* Nordeste (Destaque Principal) */}
+              <path
+                onClick={() => setSelectedRegion(BRAZIL_REGIONS[0])}
+                d="M 175,65 L 255,75 L 272,115 L 235,155 L 178,145 L 165,120 Z"
+                fill={selectedRegion.id === 'nordeste' ? '#53D68A' : 'rgba(83,214,138,0.45)'}
+                stroke="#F5F8FC"
+                strokeWidth="2"
+                className="cursor-pointer transition-all hover:opacity-95"
+              />
+              <text
+                x="220"
+                y="112"
+                fill="#071426"
+                fontSize="11"
+                fontWeight="bold"
+                textAnchor="middle"
+                className="pointer-events-none"
+              >
+                NORDESTE
+              </text>
+              <text
+                x="220"
+                y="125"
+                fill="#071426"
+                fontSize="8.5"
+                fontWeight="bold"
+                textAnchor="middle"
+                className="pointer-events-none"
+              >
+                BA • RN • PI • CE
+              </text>
+
+              {/* Sudeste / Costa Offshore */}
+              <path
+                onClick={() => setSelectedRegion(BRAZIL_REGIONS[2])}
+                d="M 178,145 L 235,155 L 225,205 L 170,210 L 180,185 Z"
+                fill={selectedRegion.id === 'sudeste_norte' ? '#42D9F5' : 'rgba(66,217,245,0.32)'}
+                stroke="#42D9F5"
+                strokeWidth="1.5"
+                className="cursor-pointer transition-all"
+              />
+              <text
+                x="202"
+                y="182"
+                fill="#F5F8FC"
+                fontSize="9"
+                fontWeight="bold"
+                textAnchor="middle"
+                className="pointer-events-none"
+              >
+                SUDESTE
+              </text>
+
+              {/* Sul */}
+              <path
+                onClick={() => setSelectedRegion(BRAZIL_REGIONS[1])}
+                d="M 145,208 L 192,210 L 172,272 L 135,255 Z"
+                fill={selectedRegion.id === 'sul' ? '#1479D4' : 'rgba(20,121,212,0.55)'}
+                stroke="#42D9F5"
+                strokeWidth="1.8"
+                className="cursor-pointer transition-all"
+              />
+              <text
+                x="166"
+                y="238"
+                fill="#F5F8FC"
+                fontSize="10"
+                fontWeight="bold"
+                textAnchor="middle"
+                className="pointer-events-none"
+              >
+                SUL (RS/SC)
+              </text>
+
+              {/* Setas dos ventos alísios no Nordeste */}
+              <line x1="298" y1="80" x2="262" y2="92" stroke="#42D9F5" strokeWidth="2" />
+              <line x1="302" y1="102" x2="268" y2="112" stroke="#42D9F5" strokeWidth="2" />
+              <text x="284" y="70" fill="#42D9F5" fontSize="8.5" textAnchor="middle">Alísios</text>
+            </svg>
+          </div>
+
+          <div className="flex gap-1.5 mt-2">
+            {BRAZIL_REGIONS.map((reg) => (
+              <button
+                key={reg.id}
+                onClick={() => setSelectedRegion(reg)}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  selectedRegion.id === reg.id
+                    ? 'bg-[#42D9F5] text-[#071426]'
+                    : 'bg-white/5 text-[#A7B7C9] hover:text-white'
+                }`}
+              >
+                {reg.id === 'nordeste' ? 'Nordeste' : reg.id === 'sul' ? 'Sul' : 'Costa / Offshore'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Detalhes da Região e Integração ao SIN */}
+        <div className="lg:col-span-7 bg-[#0B1D36]/80 border border-white/10 rounded-2xl p-5 backdrop-blur-md flex flex-col justify-between space-y-3">
+          <div>
+            <div className="flex items-center gap-2 text-[#53D68A] text-xs font-bold uppercase mb-1">
+              <MapPin className="w-4 h-4" />
+              <span>{selectedRegion.share}</span>
+            </div>
+            <h3 className="text-xl sm:text-2xl font-bold text-[#F5F8FC] mb-1">
+              {selectedRegion.name}
+            </h3>
+            <p className="text-xs font-semibold text-[#42D9F5] mb-3">
+              Estados de Destaque: {selectedRegion.states}
+            </p>
+
+            <div className="space-y-3">
+              <div className="p-3.5 rounded-xl bg-[#071426]/80 border border-white/10">
+                <div className="text-xs font-bold text-[#42D9F5] uppercase mb-1">
+                  Condições Climáticas e Regime de Ventos
+                </div>
+                <p className="text-xs sm:text-sm text-[#F5F8FC]/90 leading-relaxed">
+                  {selectedRegion.climate}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-[#1479D4]/15 border border-[#42D9F5]/30">
+                <div className="text-xs font-bold text-[#53D68A] uppercase mb-1">
+                  Integração ao Sistema Interligado Nacional (SIN)
+                </div>
+                <p className="text-xs sm:text-sm text-[#F5F8FC]/90 leading-relaxed">
+                  {selectedRegion.sin}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-[#A7B7C9] pt-2 border-t border-white/10">
+            Fontes institucionais: ANEEL (SIGA), Empresa de Pesquisa Energética (EPE), Operador Nacional do Sistema Elétrico (ONS) e ABEEólica.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// SLIDE 11 — DA USINA ATÉ A SUA CASA (8 ETAPAS PANORÂMICAS)
+// ============================================================================
+const GRID_JOURNEY_STEPS = [
+  {
+    id: 1,
+    short: '1. Aerogerador',
+    voltage: 'Energia Mecânica',
+    title: '1. O Vento Movimenta o Aerogerador',
+    desc: 'As pás captam a energia cinética dos ventos e giram o rotor, convertendo energia eólica em energia mecânica rotacional no eixo.',
+  },
+  {
+    id: 2,
+    short: '2. Gerador',
+    voltage: '~690 V (CA)',
+    title: '2. O Gerador Produz Energia Elétrica',
+    desc: 'Por indução eletromagnética de Faraday, o gerador na nacele converte a rotação mecânica em corrente elétrica alternada em baixa tensão.',
+  },
+  {
+    id: 3,
+    short: '3. Conversores',
+    voltage: '60 Hz Sincronizado',
+    title: '3. Ajuste de Frequência e Fase',
+    desc: 'Conversores eletrônicos de potência condicionam a onda senoidal para estabilizar a tensão e sincronizar perfeitamente a frequência com a rede (60 Hz no Brasil).',
+  },
+  {
+    id: 4,
+    short: '4. Trafo Elevador',
+    voltage: '34,5 kV → 230/500 kV',
+    title: '4. O Transformador Eleva a Tensão',
+    desc: 'Primeiro na base da torre (34,5 kV) e depois na subestação coletora do parque, transformadores elevam a tensão para reduzir perdas térmicas (R·I²) na viagem.',
+  },
+  {
+    id: 5,
+    short: '5. Transmissão',
+    voltage: '138 kV a 500 kV',
+    title: '5. Linhas de Transmissão de Alta Tensão',
+    desc: 'Torres metálicas transportam grandes blocos de energia por centenas de quilômetros através do Sistema Interligado Nacional até as regiões consumidoras.',
+  },
+  {
+    id: 6,
+    short: '6. Subestação',
+    voltage: '138 kV → 13,8 kV',
+    title: '6. Subestações Abaixadoras',
+    desc: 'Nas proximidades das cidades, subestações regionais reduzem a alta tensão de transmissão para níveis seguros de média tensão urbana.',
+  },
+  {
+    id: 7,
+    short: '7. Distribuição',
+    voltage: '13,8 kV',
+    title: '7. Rede de Distribuição Urbana',
+    desc: 'Os cabos primários dos postes levam a eletricidade pelos bairros e avenidas até os transformadores de distribuição locais.',
+  },
+  {
+    id: 8,
+    short: '8. Residências',
+    voltage: '127 V / 220 V',
+    title: '8. Chegada às Residências',
+    desc: 'O transformador do poste reduz a tensão para 127 V ou 220 V, alimentando lâmpadas, eletrodomésticos, escolas e hospitais com energia limpa.',
+  },
+];
+
+const Slide11Journey = () => {
+  const [activeId, setActiveId] = useState(1);
+  const currentStep = GRID_JOURNEY_STEPS.find((s) => s.id === activeId) || GRID_JOURNEY_STEPS[0];
+
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-5 md:px-14 pt-16 pb-14 max-w-7xl mx-auto">
+      <div className="mb-3">
+        <span className="text-xs font-bold tracking-widest uppercase text-[#42D9F5]">
+          11 • Sistema Elétrico de Potência
+        </span>
+        <h2 className="text-2xl sm:text-4xl font-bold text-[#F5F8FC] mt-0.5">
+          Da Usina até a sua Casa
+        </h2>
+      </div>
+
+      {/* Ilustração Panorâmica Horizontal com Linha Luminosa Azul */}
+      <div className="bg-[#0B1D36]/85 border border-white/10 rounded-2xl p-4 backdrop-blur-md mb-4">
+        <div className="w-full h-44 sm:h-52 rounded-xl bg-gradient-to-b from-[#071426] to-[#0D2544] border border-white/10 overflow-hidden">
+          <svg viewBox="0 0 880 190" className="w-full h-full">
+            {/* Solo contínuo */}
+            <line x1="20" y1="155" x2="860" y2="155" stroke="rgba(255,255,255,0.18)" strokeWidth="2" />
+
+            {/* Linha luminosa azul de energia percorrendo todo o trajeto */}
+            <path
+              d="M 75,155 L 175,155 L 275,155 L 385,155 L 495,70 L 610,130 L 720,115 L 815,130"
+              fill="none"
+              stroke="#42D9F5"
+              strokeWidth="3"
+              strokeDasharray="10 6"
+              opacity="0.85"
+            />
+
+            {/* 1. Aerogerador */}
+            <g
+              onClick={() => setActiveId(1)}
+              className="cursor-pointer"
+              opacity={activeId === 1 ? 1 : 0.75}
+            >
+              <AnimatedTurbineSVG x={75} y={42} scale={0.68} rpm={14} />
+              <circle cx="75" cy="172" r="10" fill={activeId === 1 ? '#53D68A' : '#1479D4'} />
+              <text x="75" y="176" fontSize="10" fontWeight="bold" fill="#FFF" textAnchor="middle">1</text>
+            </g>
+
+            {/* 2. Gerador */}
+            <g onClick={() => setActiveId(2)} className="cursor-pointer">
+              <rect
+                x="150"
+                y="118"
+                width="50"
+                height="36"
+                rx="5"
+                fill={activeId === 2 ? '#1479D4' : '#1E293B'}
+                stroke="#42D9F5"
+                strokeWidth="1.5"
+              />
+              <text x="175" y="140" fontSize="9" fill="#FFF" textAnchor="middle" fontWeight="bold">GER</text>
+              <circle cx="175" cy="172" r="10" fill={activeId === 2 ? '#53D68A' : '#1479D4'} />
+              <text x="175" y="176" fontSize="10" fontWeight="bold" fill="#FFF" textAnchor="middle">2</text>
+            </g>
+
+            {/* 3. Conversores */}
+            <g onClick={() => setActiveId(3)} className="cursor-pointer">
+              <rect
+                x="250"
+                y="118"
+                width="50"
+                height="36"
+                rx="5"
+                fill={activeId === 3 ? '#1479D4' : '#1E293B'}
+                stroke="#42D9F5"
+                strokeWidth="1.5"
+              />
+              <text x="275" y="140" fontSize="9" fill="#FFF" textAnchor="middle" fontWeight="bold">60Hz</text>
+              <circle cx="275" cy="172" r="10" fill={activeId === 3 ? '#53D68A' : '#1479D4'} />
+              <text x="275" y="176" fontSize="10" fontWeight="bold" fill="#FFF" textAnchor="middle">3</text>
+            </g>
+
+            {/* 4. Transformador Elevador */}
+            <g onClick={() => setActiveId(4)} className="cursor-pointer">
+              <rect
+                x="355"
+                y="108"
+                width="60"
+                height="46"
+                rx="5"
+                fill={activeId === 4 ? '#1479D4' : '#1E293B'}
+                stroke="#53D68A"
+                strokeWidth="1.8"
+              />
+              <text x="385" y="135" fontSize="9" fill="#FFF" textAnchor="middle" fontWeight="bold">TRAFO ↑</text>
+              <circle cx="385" cy="172" r="10" fill={activeId === 4 ? '#53D68A' : '#1479D4'} />
+              <text x="385" y="176" fontSize="10" fontWeight="bold" fill="#FFF" textAnchor="middle">4</text>
+            </g>
+
+            {/* 5. Torre de Alta Tensão */}
+            <g onClick={() => setActiveId(5)} className="cursor-pointer" stroke="#42D9F5" strokeWidth="1.6" fill="none">
+              <polygon points="495,55 478,155 512,155" />
+              <line x1="472" y1="75" x2="518" y2="75" />
+              <line x1="476" y1="98" x2="514" y2="98" />
+              <circle cx="495" cy="172" r="10" fill={activeId === 5 ? '#53D68A' : '#1479D4'} stroke="none" />
+              <text x="495" y="176" fontSize="10" fontWeight="bold" fill="#FFF" textAnchor="middle" stroke="none">5</text>
+            </g>
+
+            {/* 6. Subestação Abaixadora */}
+            <g onClick={() => setActiveId(6)} className="cursor-pointer">
+              <rect
+                x="582"
+                y="114"
+                width="56"
+                height="40"
+                rx="5"
+                fill={activeId === 6 ? '#1479D4' : '#1E293B'}
+                stroke="#42D9F5"
+                strokeWidth="1.5"
+              />
+              <text x="610" y="138" fontSize="9" fill="#FFF" textAnchor="middle" fontWeight="bold">SUB ↓</text>
+              <circle cx="610" cy="172" r="10" fill={activeId === 6 ? '#53D68A' : '#1479D4'} />
+              <text x="610" y="176" fontSize="10" fontWeight="bold" fill="#FFF" textAnchor="middle">6</text>
+            </g>
+
+            {/* 7. Rede de Distribuição (Poste) */}
+            <g onClick={() => setActiveId(7)} className="cursor-pointer">
+              <rect x="717" y="95" width="6" height="60" fill="#94A3B8" />
+              <line x1="705" y1="103" x2="735" y2="103" stroke="#42D9F5" strokeWidth="2.5" />
+              <circle cx="720" cy="172" r="10" fill={activeId === 7 ? '#53D68A' : '#1479D4'} />
+              <text x="720" y="176" fontSize="10" fontWeight="bold" fill="#FFF" textAnchor="middle">7</text>
+            </g>
+
+            {/* 8. Residência */}
+            <g onClick={() => setActiveId(8)} className="cursor-pointer">
+              <polygon points="815,98 785,120 845,120" fill={activeId === 8 ? '#53D68A' : '#1E3A5F'} />
+              <rect x="792" y="120" width="46" height="34" fill="#1479D4" stroke="#42D9F5" />
+              <rect x="808" y="129" width="14" height="12" fill="#FDE047" />
+              <circle cx="815" cy="172" r="10" fill={activeId === 8 ? '#53D68A' : '#1479D4'} />
+              <text x="815" y="176" fontSize="10" fontWeight="bold" fill="#FFF" textAnchor="middle">8</text>
+            </g>
+          </svg>
+        </div>
+
+        {/* Botões das 8 etapas */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 mt-3">
+          {GRID_JOURNEY_STEPS.map((st) => {
+            const active = st.id === activeId;
+            return (
+              <button
+                key={st.id}
+                onClick={() => setActiveId(st.id)}
+                className={`px-2 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer border text-center ${
+                  active
+                    ? 'bg-[#42D9F5] text-[#071426] border-[#42D9F5] shadow-[0_0_15px_rgba(66,217,245,0.5)]'
+                    : 'bg-[#071426]/80 text-[#A7B7C9] border-white/10 hover:text-white'
+                }`}
+              >
+                {st.short}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Card Explicativo da Etapa Selecionada */}
+      <div className="bg-gradient-to-r from-[#0B1D36]/90 to-[#112A4A]/90 border border-[#42D9F5]/40 rounded-2xl p-5 backdrop-blur-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-[#53D68A]/20 border border-[#53D68A]/40 text-xs font-bold text-[#53D68A]">
+            <Zap className="w-3.5 h-3.5" /> Nível / Estágio: {currentStep.voltage}
+          </div>
+          <h3 className="text-lg sm:text-2xl font-bold text-[#F5F8FC]">
+            {currentStep.title}
+          </h3>
+          <p className="text-xs sm:text-sm md:text-base text-[#F5F8FC]/90 leading-relaxed max-w-4xl">
+            {currentStep.desc}
+          </p>
+        </div>
+
+        <div className="flex sm:flex-col gap-2 shrink-0">
+          <button
+            onClick={() => setActiveId((prev) => Math.max(1, prev - 1))}
+            disabled={activeId === 1}
+            className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-30 text-xs font-bold text-white cursor-pointer"
+          >
+            ← Anterior
+          </button>
+          <button
+            onClick={() => setActiveId((prev) => Math.min(8, prev + 1))}
+            disabled={activeId === 8}
+            className="px-3.5 py-2 rounded-xl bg-[#1479D4] hover:bg-[#1B88EB] disabled:opacity-30 text-xs font-bold text-white cursor-pointer"
+          >
+            Próxima →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// SLIDE 12 — QUIZ INTERATIVO (10 QUESTÕES CIENTÍFICAS)
+// ============================================================================
+const QUIZ_QUESTIONS = [
+  {
+    q: '1. Qual forma de energia o vento possui originalmente antes de atingir as pás do aerogerador?',
+    options: [
+      'Energia potencial química',
+      'Energia cinética das massas de ar em movimento',
+      'Energia térmica nuclear',
+      'Energia potencial elástica',
+    ],
+    correct: 1,
+    explanation:
+      'O vento consiste no deslocamento de massas de ar com massa (m) e velocidade (v), possuindo energia cinética dada por Ec = (m · v²) / 2.',
+  },
+  {
+    q: '2. Segundo a equação P = ½ · ρ · A · v³, o que acontece com a potência disponível no vento se sua velocidade dobrar (2v)?',
+    options: [
+      'A potência dobra (2× maior)',
+      'A potência quadruplica (4× maior)',
+      'A potência torna-se oito vezes maior (8× maior)',
+      'A potência permanece constante',
+    ],
+    correct: 2,
+    explanation:
+      'Como a potência é proporcional ao cubo da velocidade (v³), dobrar a velocidade resulta em 2³ = 8 vezes mais potência disponível no vento.',
+  },
+  {
+    q: '3. Qual princípio aerodinâmico explica o giro das pás de um aerogerador moderno?',
+    options: [
+      'Apenas o impacto frontal do ar como em uma parede plana',
+      'A diferença de pressão entre as faces do perfil aerodinâmico, gerando força de sustentação e torque',
+      'A atração gravitacional entre as pás e a torre',
+      'O aquecimento magnético do cubo central',
+    ],
+    correct: 1,
+    explanation:
+      'As pás têm perfil aerodinâmico semelhante ao de asas de avião: o escoamento cria diferença de pressão que gera força de sustentação e torque rotacional.',
+  },
+  {
+    q: '4. Qual lei física rege a conversão de energia mecânica em elétrica no interior do gerador?',
+    options: [
+      'Lei da Indução Eletromagnética de Faraday',
+      'Lei de Hooke',
+      'Princípio de Arquimedes',
+      'Lei de Coulomb estática',
+    ],
+    correct: 0,
+    explanation:
+      'A Lei de Faraday-Lenz (ε = -N · ΔΦ/Δt) estabelece que a variação do fluxo magnético através de bobinas induz força eletromotriz e corrente elétrica.',
+  },
+  {
+    q: '5. Qual é a principal função da caixa multiplicadora em aerogeradores convencionais?',
+    options: [
+      'Diminuir a velocidade do vento após o rotor',
+      'Elevar a baixa velocidade de rotação do rotor para a alta rotação exigida pelo gerador',
+      'Converter corrente alternada em corrente contínua',
+      'Armazenar energia térmica na nacele',
+    ],
+    correct: 1,
+    explanation:
+      'A caixa multiplicadora eleva a rotação típica do rotor (~15 rpm) para cerca de 1.500 rpm no eixo do gerador elétrico.',
+  },
+  {
+    q: '6. Por que os transformadores elevam drasticamente a tensão elétrica antes da transmissão por longas distâncias?',
+    options: [
+      'Para aumentar a resistência elétrica dos cabos',
+      'Para reduzir a corrente elétrica e minimizar as perdas térmicas por Efeito Joule (R · I²)',
+      'Para fazer o vento soprar mais rápido',
+      'Para eliminar a necessidade de subestações',
+    ],
+    correct: 1,
+    explanation:
+      'Para uma mesma potência transmitida (P = U·I), elevar a tensão (U) reduz proporcionalmente a corrente (I), diminuindo drasticamente as perdas dissipadas por calor (P = R·I²).',
+  },
+  {
+    q: '7. De acordo com o Limite de Betz, qual é a fração máxima teórica da energia cinética do vento que uma turbina pode extrair?',
+    options: [
+      '100%',
+      '85,4%',
+      '59,3% (16/27)',
+      '25,0%',
+    ],
+    correct: 2,
+    explanation:
+      'Albert Betz demonstrou que o coeficiente de potência máximo é 16/27 ≈ 59,3%, pois o ar precisa continuar escoando após passar pelo rotor.',
+  },
+  {
+    q: '8. Qual sistema ajusta o ângulo das pás em torno de seu próprio eixo para controlar a potência ou proteger a turbina em ventos fortes?',
+    options: [
+      'Sistema de controle de passo (Pitch)',
+      'Fundação de concreto',
+      'Subestação abaixadora',
+      'Anemômetro de copa',
+    ],
+    correct: 0,
+    explanation:
+      'O sistema Pitch gira as pás longitudinalmente para otimizar o ângulo de ataque ou colocá-las em posição de bandeira acima da velocidade de corte.',
+  },
+  {
+    q: '9. Por que a Região Nordeste lidera a geração eólica no Brasil?',
+    options: [
+      'Por possuir os maiores rios de planície do mundo',
+      'Devido aos ventos alísios constantes, unidirecionais e com baixa turbulência',
+      'Porque utiliza apenas turbinas de eixo vertical',
+      'Por não estar conectada ao Sistema Interligado Nacional',
+    ],
+    correct: 1,
+    explanation:
+      'Os ventos alísios constantes no Nordeste garantem altíssimos fatores de capacidade e complementam a geração hidrelétrica na estação seca.',
+  },
+  {
+    q: '10. Qual das alternativas representa uma vantagem ambiental da geração eólica em operação?',
+    options: [
+      'Consumo contínuo de carvão mineral',
+      'Não emissão direta de gases de efeito estufa e ausência de uso de combustíveis na geração',
+      'Independência total de linhas de transmissão',
+      'Impossibilidade de uso agrícola no terreno ao redor',
+    ],
+    correct: 1,
+    explanation:
+      'Durante a operação, aerogeradores não queimam combustíveis nem emitem gases de efeito estufa, permitindo ainda o uso múltiplo do solo.',
+  },
+];
+
+const Slide12Quiz = () => {
+  const [qIndex, setQIndex] = useState(0);
+  const [selectedOption, setSelectedOption] = useState(null);
+  const [score, setScore] = useState(0);
+  const [finished, setFinished] = useState(false);
+
+  const currentQ = QUIZ_QUESTIONS[qIndex];
+  const hasAnswered = selectedOption !== null;
+
+  const handleSelect = (optIdx) => {
+    if (hasAnswered) return;
+    setSelectedOption(optIdx);
+    if (optIdx === currentQ.correct) {
+      setScore((s) => s + 1);
+    }
+  };
+
+  const handleNext = () => {
+    if (qIndex + 1 < QUIZ_QUESTIONS.length) {
+      setQIndex((i) => i + 1);
+      setSelectedOption(null);
+    } else {
+      setFinished(true);
+    }
+  };
+
+  const handleRestart = () => {
+    setQIndex(0);
+    setSelectedOption(null);
+    setScore(0);
+    setFinished(false);
+  };
+
+  const percentage = Math.round((score / QUIZ_QUESTIONS.length) * 100);
+
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-5 md:px-14 pt-16 pb-14 max-w-4xl mx-auto">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <span className="text-xs font-bold tracking-widest uppercase text-[#42D9F5]">
+            12 • Avaliação de Aprendizagem
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-bold text-[#F5F8FC]">
+            Teste seus Conhecimentos
+          </h2>
+        </div>
+
+        <div className="px-3.5 py-1.5 rounded-xl bg-[#0B1D36] border border-[#42D9F5]/40 text-xs sm:text-sm font-bold text-[#42D9F5]">
+          Pontuação: {score} / {QUIZ_QUESTIONS.length}
+        </div>
+      </div>
+
+      {!finished ? (
+        <div className="bg-[#0B1D36]/85 border border-white/10 rounded-2xl p-5 sm:p-6 backdrop-blur-md shadow-xl space-y-4">
+          {/* Progresso do Quiz */}
+          <div className="flex items-center justify-between text-xs text-[#A7B7C9]">
+            <span>
+              Questão <strong className="text-white">{qIndex + 1}</strong> de {QUIZ_QUESTIONS.length}
+            </span>
+            <span>{Math.round(((qIndex + 1) / QUIZ_QUESTIONS.length) * 100)}% concluído</span>
+          </div>
+          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-[#1479D4] to-[#42D9F5] transition-all duration-300"
+              style={{ width: `${((qIndex + 1) / QUIZ_QUESTIONS.length) * 100}%` }}
+            />
+          </div>
+
+          <h3 className="text-base sm:text-xl font-bold text-[#F5F8FC] leading-snug">
+            {currentQ.q}
+          </h3>
+
+          <div className="space-y-2.5">
+            {currentQ.options.map((opt, idx) => {
+              let btnStyle =
+                'bg-[#071426]/80 border-white/15 text-[#F5F8FC] hover:border-[#42D9F5]/60 hover:bg-[#1479D4]/15';
+
+              if (hasAnswered) {
+                if (idx === currentQ.correct) {
+                  btnStyle = 'bg-[#53D68A]/20 border-[#53D68A] text-white font-semibold';
+                } else if (idx === selectedOption) {
+                  btnStyle = 'bg-red-500/20 border-red-400 text-red-200';
+                } else {
+                  btnStyle = 'bg-[#071426]/50 border-white/10 text-[#A7B7C9]/60';
+                }
+              }
+
+              return (
+                <button
+                  key={idx}
+                  onClick={() => handleSelect(idx)}
+                  disabled={hasAnswered}
+                  className={`w-full p-3.5 rounded-xl border text-left text-xs sm:text-sm transition-all flex items-center justify-between gap-3 cursor-pointer ${btnStyle}`}
+                >
+                  <span>
+                    <strong className="text-[#42D9F5] mr-2">
+                      {String.fromCharCode(65 + idx)})
+                    </strong>
+                    {opt}
+                  </span>
+                  {hasAnswered && idx === currentQ.correct && (
+                    <CheckCircle2 className="w-5 h-5 text-[#53D68A] shrink-0" />
+                  )}
+                  {hasAnswered && idx === selectedOption && idx !== currentQ.correct && (
+                    <XCircle className="w-5 h-5 text-red-400 shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Feedback Científico após responder */}
+          {hasAnswered && (
+            <div
+              className={`p-3.5 rounded-xl border text-xs sm:text-sm leading-relaxed ${
+                selectedOption === currentQ.correct
+                  ? 'bg-[#53D68A]/15 border-[#53D68A]/50 text-[#F5F8FC]'
+                  : 'bg-amber-400/15 border-amber-400/50 text-[#F5F8FC]'
+              }`}
+            >
+              <div className="font-bold mb-1">
+                {selectedOption === currentQ.correct
+                  ? '✓ Resposta Correta!'
+                  : '✕ Resposta Incorreta — Veja a explicação científica:'}
+              </div>
+              <p className="text-[#F5F8FC]/90">{currentQ.explanation}</p>
+            </div>
+          )}
+
+          {hasAnswered && (
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={handleNext}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#1479D4] to-[#42D9F5] text-[#071426] font-extrabold text-xs sm:text-sm cursor-pointer shadow-lg hover:opacity-95"
+              >
+                {qIndex + 1 < QUIZ_QUESTIONS.length ? 'Próxima Questão →' : 'Ver Resultado Final →'}
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Tela Final de Resultado */
+        <div className="bg-[#0B1D36]/90 border border-[#42D9F5]/40 rounded-2xl p-6 sm:p-8 backdrop-blur-md text-center space-y-5">
+          <div className="w-16 h-16 rounded-2xl bg-[#53D68A]/20 border border-[#53D68A] flex items-center justify-center mx-auto text-[#53D68A]">
+            <Award className="w-9 h-9" />
+          </div>
+
+          <div>
+            <h3 className="text-2xl sm:text-3xl font-extrabold text-[#F5F8FC]">
+              Resultado da Avaliação Científica
+            </h3>
+            <p className="text-sm text-[#A7B7C9] mt-1">
+              Você acertou <strong className="text-[#53D68A]">{score}</strong> de{' '}
+              <strong className="text-white">{QUIZ_QUESTIONS.length}</strong> questões ({percentage}%)
+            </p>
+          </div>
+
+          <div className="max-w-lg mx-auto p-4 rounded-xl bg-[#071426]/80 border border-white/10 text-xs sm:text-sm text-[#F5F8FC]">
+            {percentage >= 80
+              ? 'Excelente domínio científico! Você compreendeu profundamente a física dos ventos, a aerodinâmica, o limite de Betz e a geração eletromagnética.'
+              : percentage >= 50
+              ? 'Bom desempenho! Você domina os conceitos fundamentais e pode revisar o simulador e os diagramas para atingir a pontuação máxima.'
+              : 'Continue explorando a apresentação e o simulador interativo para consolidar os princípios físicos das usinas eólicas!'}
+          </div>
+
+          <button
+            onClick={handleRestart}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#1479D4] hover:bg-[#1B88EB] text-white font-bold text-sm cursor-pointer transition-all"
+          >
+            <RotateCcw className="w-4 h-4" /> Refazer o Quiz
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// SLIDE 13 — CONCLUSÃO
+// ============================================================================
+const Slide13Conclusion = ({ onRestartPresentation, onGoToSimulator }) => {
+  return (
+    <div className="relative w-full h-full flex flex-col justify-between overflow-hidden px-6 md:px-16 pt-20 pb-14">
+      {/* Gradiente cinematográfico de pôr do sol no horizonte */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-65"
+        style={{
+          background:
+            'radial-gradient(ellipse at 50% 82%, rgba(245, 158, 11, 0.34) 0%, rgba(20, 121, 212, 0.22) 42%, rgba(7, 20, 38, 0.95) 80%)',
+        }}
+      />
+
+      <div className="relative z-10 max-w-4xl mx-auto text-center my-auto space-y-6">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#53D68A]/15 border border-[#53D68A]/40 text-[#53D68A] text-xs font-bold uppercase tracking-widest">
+          <Sparkles className="w-4 h-4" /> Síntese Científica • Futuro Sustentável
+        </div>
+
+        <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-[#F5F8FC] leading-tight">
+          O VENTO É MOVIMENTO.
+          <br />
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#42D9F5] via-[#53D68A] to-amber-300">
+            O MOVIMENTO É ENERGIA.
+          </span>
+        </h1>
+
+        <p className="text-sm sm:text-base md:text-lg text-[#F5F8FC]/90 max-w-3xl mx-auto leading-relaxed bg-[#071426]/65 p-5 rounded-2xl border border-white/10 backdrop-blur-md">
+          “As usinas eólicas demonstram como os princípios da Física podem ser utilizados para transformar um fenômeno natural em eletricidade. Por meio da aerodinâmica, da mecânica e do eletromagnetismo, a energia cinética do vento é convertida em energia elétrica, contribuindo para uma matriz energética mais sustentável.”
+        </p>
+
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+          <button
+            onClick={onRestartPresentation}
+            className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-[#F5F8FC] font-bold text-sm transition-all cursor-pointer backdrop-blur-md"
+          >
+            <RotateCcw className="w-4 h-4 text-[#42D9F5]" />
+            REVER APRESENTAÇÃO
+          </button>
+
+          <button
+            onClick={onGoToSimulator}
+            className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-gradient-to-r from-[#1479D4] to-[#53D68A] text-[#071426] font-extrabold text-sm shadow-[0_0_28px_rgba(83,214,138,0.45)] hover:scale-105 transition-all cursor-pointer"
+          >
+            <Sliders className="w-4 h-4" />
+            EXPLORAR O SIMULADOR
+          </button>
+        </div>
+      </div>
+
+      {/* Silhueta Panorâmica de Parque Eólico ao Pôr do Sol */}
+      <div className="relative z-10 w-full max-w-6xl mx-auto h-40 sm:h-48 pointer-events-none">
+        <svg viewBox="0 0 1200 220" className="w-full h-full overflow-visible">
+          {/* Sol no horizonte */}
+          <circle cx="600" cy="175" r="78" fill="rgba(251, 191, 36, 0.25)" />
+          <circle cx="600" cy="175" r="46" fill="rgba(253, 224, 71, 0.45)" />
+
+          {/* Horizonte montanhoso */}
+          <path
+            d="M-50,220 L-50,165 Q300,135 600,168 T1250,155 L1250,220 Z"
+            fill="#071426"
+          />
+
+          {/* Aerogeradores girando no horizonte */}
+          <AnimatedTurbineSVG x={220} y={40} scale={0.78} rpm={12} glowColor="#FBBF24" />
+          <AnimatedTurbineSVG x={430} y={52} scale={0.68} rpm={11} glowColor="#FBBF24" />
+          <AnimatedTurbineSVG x={770} y={48} scale={0.72} rpm={13} glowColor="#FBBF24" />
+          <AnimatedTurbineSVG x={980} y={36} scale={0.82} rpm={12} glowColor="#FBBF24" />
+        </svg>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// APLICAÇÃO PRINCIPAL — CONTROLADOR DE SLIDES E NAVEGAÇÃO
+// ============================================================================
+    function App() {
+  const [currentSlide, setCurrentSlide] = useState(0); // 0 a 12 (13 slides)
+  const [menuOpen, setMenuOpen] = useState(false);
+  const wheelLockRef = useRef(false);
+  const touchStartYRef = useRef(null);
+  const slideContainerRef = useRef(null);
+
+  const totalSlides = SLIDES_META.length;
+
+  const goToSlide = useCallback(
+    (index) => {
+      const clamped = Math.max(0, Math.min(totalSlides - 1, index));
+      setCurrentSlide(clamped);
+      setMenuOpen(false);
+      if (slideContainerRef.current) {
+        slideContainerRef.current.scrollTop = 0;
+      }
+    },
+    [totalSlides]
+  );
+
+  const nextSlide = useCallback(() => goToSlide(currentSlide + 1), [currentSlide, goToSlide]);
+  const prevSlide = useCallback(() => goToSlide(currentSlide - 1), [currentSlide, goToSlide]);
+
+  // Navegação por teclado (Setas)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Evita trocar de slide enquanto o usuário ajusta um slider com as setas
+      if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        prevSlide();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [nextSlide, prevSlide]);
+
+  // Navegação controlada por rolagem vertical (Wheel) quando no topo/base do slide
+  const handleWheel = (e) => {
+    if (wheelLockRef.current) return;
+    const el = slideContainerRef.current;
+    if (!el) return;
+
+    const atTop = el.scrollTop <= 2;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+
+    if (e.deltaY > 45 && atBottom && currentSlide < totalSlides - 1) {
+      wheelLockRef.current = true;
+      nextSlide();
+      setTimeout(() => {
+        wheelLockRef.current = false;
+      }, 650);
+    } else if (e.deltaY < -45 && atTop && currentSlide > 0) {
+      wheelLockRef.current = true;
+      prevSlide();
+      setTimeout(() => {
+        wheelLockRef.current = false;
+      }, 650);
+    }
+  };
+
+  // Gestos de toque (Swipe vertical suave em dispositivos móveis)
+  const handleTouchStart = (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartYRef.current === null) return;
+    const deltaY = touchStartYRef.current - e.changedTouches[0].clientY;
+    touchStartYRef.current = null;
+
+    const el = slideContainerRef.current;
+    if (!el) return;
+    const atTop = el.scrollTop <= 2;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+
+    if (deltaY > 70 && atBottom && currentSlide < totalSlides - 1) {
+      nextSlide();
+    } else if (deltaY < -70 && atTop && currentSlide > 0) {
+      prevSlide();
+    }
+  };
+
+  const progressPct = ((currentSlide + 1) / totalSlides) * 100;
+
+  return (
+    <div
+      onWheel={handleWheel}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      className="relative w-screen h-screen overflow-hidden bg-[#071426] text-[#F5F8FC] font-sans select-none"
+    >
+      {/* Keyframes globais para rotação suave das turbinas e gradientes compartilhados */}
+      <style>{`
+        @keyframes spinTurbine {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes fadeSlideIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .slide-animate {
+          animation: fadeSlideIn 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}</style>
+
+      {/* Definições SVG globais compartilhadas */}
+      <svg width="0" height="0" className="absolute">
+        <defs>
+          <linearGradient id="towerGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#CBD5E1" />
+            <stop offset="50%" stopColor="#F8FAFC" />
+            <stop offset="100%" stopColor="#94A3B8" />
+          </linearGradient>
+          <linearGradient id="bladeGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="100%" stopColor="#CBD5E1" />
+          </linearGradient>
+        </defs>
+      </svg>
+
+      {/* Fundo Dinâmico de Partículas de Vento */}
+      <WindCanvasBackground
+        speedMultiplier={currentSlide === 5 ? 1.5 : 1}
+        warmSunset={currentSlide === 12}
+      />
+
+      {/* BARRA SUPERIOR FIXA + BARRA DE PROGRESSO */}
+      <header className="fixed top-0 left-0 right-0 z-40 bg-[#071426]/80 backdrop-blur-md border-b border-white/10">
+        {/* Linha de Progresso */}
+        <div className="w-full h-1 bg-white/10">
+          <div
+            className="h-full bg-gradient-to-r from-[#1479D4] via-[#42D9F5] to-[#53D68A] transition-all duration-300"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 md:px-8 h-12 flex items-center justify-between gap-3">
+          {/* Logo / Identidade */}
+          <button
+            onClick={() => goToSlide(0)}
+            className="flex items-center gap-2 text-left cursor-pointer group"
+          >
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#1479D4] to-[#42D9F5] flex items-center justify-center text-[#071426]">
+              <Wind className="w-4 h-4" />
+            </div>
+            <span className="font-extrabold text-xs sm:text-sm tracking-wide text-[#F5F8FC] group-hover:text-[#42D9F5] transition-colors">
+              USINAS EÓLICAS
+            </span>
+          </button>
+
+          {/* Navegação Rápida Desktop (Pílulas dos 13 slides) */}
+          <nav className="hidden xl:flex items-center gap-1">
+            {SLIDES_META.map((s, idx) => {
+              const active = idx === currentSlide;
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => goToSlide(idx)}
+                  className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                    active
+                      ? 'bg-[#42D9F5] text-[#071426] font-bold'
+                      : 'text-[#A7B7C9] hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  {String(s.id).padStart(2, '0')}. {s.short}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Contador + Botão do Índice Completo */}
+          <div className="flex items-center gap-2.5">
+            <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 font-mono text-xs font-bold text-[#42D9F5]">
+              {String(currentSlide + 1).padStart(2, '0')} / {String(totalSlides).padStart(2, '0')}
+            </span>
+
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1479D4]/25 hover:bg-[#1479D4]/40 border border-[#42D9F5]/40 text-xs font-semibold text-[#F5F8FC] cursor-pointer"
+              aria-label="Abrir índice de slides"
+            >
+              {menuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              <span className="hidden sm:inline">Slides</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* DRAWER DO ÍNDICE DE NAVEGAÇÃO (13 SLIDES) */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-50 bg-[#071426]/80 backdrop-blur-md flex justify-end">
+          <div className="w-full max-w-sm bg-[#0B1D36] border-l border-[#42D9F5]/30 h-full p-5 flex flex-col justify-between overflow-y-auto">
+            <div>
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
+                <span className="text-sm font-bold text-[#42D9F5] uppercase tracking-wider">
+                  Índice da Apresentação
+                </span>
+                <button
+                  onClick={() => setMenuOpen(false)}
+                  className="p-1.5 rounded-lg bg-white/10 text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                {SLIDES_META.map((s, idx) => {
+                  const active = idx === currentSlide;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => goToSlide(idx)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs sm:text-sm transition-all cursor-pointer border ${
+                        active
+                          ? 'bg-[#1479D4] text-white border-[#42D9F5] font-bold'
+                          : 'bg-white/5 text-[#A7B7C9] border-transparent hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <span className="font-mono text-xs font-bold text-[#42D9F5]">
+                        {String(s.id).padStart(2, '0')}
+                      </span>
+                      <span className="truncate">{s.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-4 mt-4 border-t border-white/10 text-[11px] text-[#A7B7C9]">
+              Dica: Use as setas ← e → do teclado ou role entre as telas para navegar.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ÁREA PRINCIPAL DO SLIDE ATIVO */}
+      <main
+        ref={slideContainerRef}
+        key={currentSlide}
+        className="relative z-10 w-full h-full overflow-y-auto slide-animate"
+      >
+        {currentSlide === 0 && <Slide01Cover onExplore={() => goToSlide(1)} />}
+        {currentSlide === 1 && <Slide02Concept />}
+        {currentSlide === 2 && <Slide03Physics />}
+        {currentSlide === 3 && <Slide04HowItWorks />}
+        {currentSlide === 4 && <Slide05Parts />}
+        {currentSlide === 5 && <Slide06Simulator />}
+        {currentSlide === 6 && <Slide07Betz />}
+        {currentSlide === 7 && <Slide08Types />}
+        {currentSlide === 8 && <Slide09ProsCons />}
+        {currentSlide === 9 && <Slide10Brazil />}
+        {currentSlide === 10 && <Slide11Journey />}
+        {currentSlide === 11 && <Slide12Quiz />}
+        {currentSlide === 12 && (
+          <Slide13Conclusion
+            onRestartPresentation={() => goToSlide(0)}
+            onGoToSimulator={() => goToSlide(5)}
+          />
+        )}
+      </main>
+
+      {/* RODAPÉ FIXO DE NAVEGAÇÃO ENTRE SLIDES */}
+      <footer className="fixed bottom-0 left-0 right-0 z-40 bg-[#071426]/80 backdrop-blur-md border-t border-white/10 h-12 px-4 md:px-8 flex items-center justify-between">
+        <button
+          onClick={prevSlide}
+          disabled={currentSlide === 0}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 text-xs font-bold text-[#F5F8FC] transition-all cursor-pointer"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          <span>Anterior</span>
+        </button>
+
+        {/* Indicadores de Bolinhas (Dots) */}
+        <div className="flex items-center gap-1.5">
+          {SLIDES_META.map((s, idx) => (
+            <button
+              key={s.id}
+              onClick={() => goToSlide(idx)}
+              title={`Slide ${s.id}: ${s.title}`}
+              className={`h-2 rounded-full transition-all cursor-pointer ${
+                idx === currentSlide
+                  ? 'w-6 bg-[#42D9F5]'
+                  : 'w-2 bg-white/25 hover:bg-white/50'
+              }`}
+            />
+          ))}
+        </div>
+
+<button
+  onClick={nextSlide}
+  disabled={currentSlide === totalSlides - 1}
+  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#1479D4] hover:bg-[#1B88EB] disabled:opacity-30 text-xs font-bold text-white transition-all cursor-pointer"
+>
+  <span>Avançar</span>
+  <ChevronRight className="w-4 h-4" />
+</button>
+</footer>
+</div>
+);
+}
+
+
+
+    // ========================================================================
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
